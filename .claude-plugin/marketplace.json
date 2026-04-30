@@ -1,0 +1,51 @@
+{
+  "name": "dreamspace-ai",
+  "owner": {
+    "name": "DreamSpace AI proposal"
+  },
+  "metadata": {
+    "description": "Proposed AI skills catalog for the DreamSpace SDK and Space and Time. This is a pitch artifact — see /docs/spaceandtime-ai/overview for the full proposal.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "dreamspace-query",
+      "source": "./packages/plugins/dreamspace-query",
+      "description": "Verifiable SQL on Space and Time — keeps agents inside the Proof of SQL surface.",
+      "version": "0.1.0",
+      "author": {
+        "name": "DreamSpace AI proposal"
+      },
+      "homepage": "https://docs.spaceandtime.io/docs/what-is-space-and-time-quick-intro",
+      "license": "MIT",
+      "category": "blockchain",
+      "keywords": ["space-and-time", "proof-of-sql", "zk", "sql", "blockchain", "dreamspace"]
+    },
+    {
+      "name": "dreamspace-contracts",
+      "source": "./packages/plugins/dreamspace-contracts",
+      "description": "Deploy contracts via foundry and run pre-deploy audits combining slither with SXT-indexed onchain due diligence.",
+      "version": "0.1.0",
+      "author": {
+        "name": "DreamSpace AI proposal"
+      },
+      "homepage": "https://docs.spaceandtime.io/docs/what-is-space-and-time-quick-intro",
+      "license": "MIT",
+      "category": "blockchain",
+      "keywords": ["space-and-time", "smart-contracts", "audit", "slither", "proof-of-sql", "dreamspace", "ethereum", "evm"]
+    },
+    {
+      "name": "dreamspace-data",
+      "source": "./packages/plugins/dreamspace-data",
+      "description": "Publish chain-secured datasets to Space and Time for downstream skills to query with proof.",
+      "version": "0.1.0",
+      "author": {
+        "name": "DreamSpace AI proposal"
+      },
+      "homepage": "https://docs.spaceandtime.io/docs/creating-tables-ddl",
+      "license": "MIT",
+      "category": "blockchain",
+      "keywords": ["space-and-time", "dreamspace", "dataset", "publish", "biscuit", "substrate", "tables"]
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "dreamspace-data",
+  "version": "0.1.0",
+  "description": "Publish datasets to chain-secured Space and Time tables, mint capability-scoped biscuit tokens, and prepare reference data that downstream skills consume.",
+  "author": {
+    "name": "DreamSpace AI proposal"
+  },
+  "homepage": "https://docs.spaceandtime.io/docs/creating-tables-ddl",
+  "license": "MIT",
+  "keywords": ["space-and-time", "dreamspace", "dataset", "publish", "biscuit", "substrate", "tables"]
+}

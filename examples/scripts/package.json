@@ -1,0 +1,22 @@
+{
+  "name": "dreamspace-ai-examples",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Example scripts for the DreamSpace AI proposal — publish datasets and audit contracts against Space and Time testnet without leaving the CLI.",
+  "scripts": {
+    "generate": "node generate-substrate-account.mjs",
+    "publish": "node publish-dataset-cli.mjs",
+    "audit": "node audit-with-sxt.mjs"
+  },
+  "dependencies": {
+    "@polkadot/api": "^11.0.0",
+    "@polkadot/keyring": "^12.0.0",
+    "@polkadot/util": "^12.0.0",
+    "@polkadot/util-crypto": "^12.0.0",
+    "apache-arrow": "^17.0.0",
+    "csv-parse": "^5.5.0",
+    "dotenv": "^16.4.0",
+    "ethers": "^6.13.0"
+  }
+}
