@@ -110,8 +110,8 @@ $ node query-onchain.mjs`}</code></pre>
 
       <h2 id="next">Next</h2>
       <ul>
-        <li>Architecture and the loop diagram: <Link href="/docs/spaceandtime-ai/overview">What this repo ships</Link></li>
-        <li>The five skills with trigger phrases and refusal rules: <Link href="/docs/spaceandtime-ai/skills">Skills catalog</Link></li>
+        <li>Architecture and the loop diagram: <a href="https://github.com/biffbuster/sxt-tools/blob/main/HOW_IT_WORKS.md" target="_blank" rel="noopener noreferrer">HOW_IT_WORKS.md</a></li>
+        <li>The five skills with trigger phrases and refusal rules: <a href="https://github.com/biffbuster/sxt-tools/tree/main/packages/plugins" target="_blank" rel="noopener noreferrer">packages/plugins/</a></li>
         <li>Background on Proof of SQL, QueryRouter, and the on-chain Verifier: <Link href="/docs/space-and-time">Space and Time primitives</Link></li>
       </ul>
     </>

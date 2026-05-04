@@ -9,8 +9,8 @@ export default function DocsOverview() {
       </p>
 
       <div className="docs-callout docs-callout-info">
-        <div className="docs-callout-title">Implemented and runnable in this repo</div>
-        Five skills ship in <code>packages/plugins/</code>. The canonical demo dataset (<code>examples/data/sxt_stakers.csv</code>) is published to SXT mainnet; the bootstrap script wires the whole pipeline; the <code>StakersQuery.sol</code> contract is audit-clean and deploys to Base mainnet. See the README at the repo root for the run-it-yourself walkthrough.
+        <div className="docs-callout-title">Verified live on Base mainnet</div>
+        End-to-end pipeline confirmed 2026-05-04 — a 2 062-row CSV was published to SXT chain, deployed as <code>OnchainQuery.sol</code> at <a href="https://basescan.org/address/0x1fc02a8dc0A4050B2DA5D075838F37705fcF0Aa1" target="_blank" rel="noopener noreferrer"><code>0x1fc02a8d…</code></a>, queried via <code>IQueryRouter.requestQuery</code>, and the SXT executor fulfilled the proof in 3 blocks. <a href="https://basescan.org/tx/0xd702a4014ec5258a032b39bf9dcfceea838aed51c519d9285f463c1eb23e25b0" target="_blank" rel="noopener noreferrer">QueryFulfilled callback on BaseScan</a>. The <code>QueryRow</code> event proves <code>0x45c5…aedc</code> is a member of the published table.
       </div>
 
       <h2 id="install">Install the marketplace</h2>
@@ -32,18 +32,18 @@ export default function DocsOverview() {
             Five commands from a fresh clone to a verified Base-mainnet event. The bootstrap script wires the prereqs check, balance probes, and pipeline runner.
           </div>
         </Link>
-        <Link href="/docs/spaceandtime-ai/overview" className="docs-quicknav-card">
-          <div className="docs-quicknav-card-title">What this repo ships</div>
+        <a href="https://github.com/biffbuster/sxt-tools/blob/main/HOW_IT_WORKS.md" target="_blank" rel="noopener noreferrer" className="docs-quicknav-card">
+          <div className="docs-quicknav-card-title">How it works</div>
           <div className="docs-quicknav-card-desc">
-            Architecture of the publish-and-prove pipeline, the chain rules the skills carry for you, and the loop diagram showing where each skill fits.
+            Architecture of the publish-and-prove pipeline, what Claude Code reads, and a sample three-prompt conversation that takes a CSV to a verified Base event.
           </div>
-        </Link>
-        <Link href="/docs/spaceandtime-ai/skills" className="docs-quicknav-card">
+        </a>
+        <a href="https://github.com/biffbuster/sxt-tools/tree/main/packages/plugins" target="_blank" rel="noopener noreferrer" className="docs-quicknav-card">
           <div className="docs-quicknav-card-title">Skills catalog</div>
           <div className="docs-quicknav-card-desc">
-            All five shipped skills with their trigger phrases, refusal rules, and the SKILL.md format reference for authoring more.
+            All five shipped <code>SKILL.md</code> files with their trigger phrases, refusal rules, and example invocations — read directly from the plugins directory.
           </div>
-        </Link>
+        </a>
         <Link href="/docs/space-and-time" className="docs-quicknav-card">
           <div className="docs-quicknav-card-title">Space and Time primitives</div>
           <div className="docs-quicknav-card-desc">
@@ -84,8 +84,8 @@ export default function DocsOverview() {
       <h2 id="next">Next</h2>
       <ul>
         <li>Run it: <Link href="/docs/quick-start">Quick start</Link>.</li>
-        <li>Understand it: <Link href="/docs/spaceandtime-ai/overview">What this repo ships</Link>.</li>
-        <li>Use the catalog: <Link href="/docs/spaceandtime-ai/skills">Skills catalog</Link>.</li>
+        <li>Understand it: <a href="https://github.com/biffbuster/sxt-tools/blob/main/HOW_IT_WORKS.md" target="_blank" rel="noopener noreferrer">HOW_IT_WORKS.md</a> on GitHub — architecture + sample agent conversation.</li>
+        <li>Use the catalog: <a href="https://github.com/biffbuster/sxt-tools/tree/main/packages/plugins" target="_blank" rel="noopener noreferrer">packages/plugins/</a> — all five <code>SKILL.md</code> files.</li>
         <li>Read the underlying primitives: <Link href="/docs/space-and-time">Space and Time primitives</Link>.</li>
       </ul>
     </>
