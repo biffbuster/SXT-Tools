@@ -1,178 +1,116 @@
-# DreamSpace AI — Example Scripts
+# Example scripts
 
-Two scripts that demonstrate the v0.1 workflow against Space and Time testnet from the CLI alone, no browser required after one-time wallet setup.
-
-## Scripts
-
-| Script | Purpose | Status |
-|---|---|---|
-| `generate-substrate-account.mjs` | Generate a fresh sr25519 mnemonic + SS58 address for use as the table owner | ✅ Stable. Run once to bootstrap a CLI publishing identity. |
-| `publish-dataset-cli.mjs` | Publish a CSV to SxT testnet as a chain-secured table via Polkadot.js | ⚠ Pre-tested. Insert method name may need a one-line tweak per chain version. |
-| `audit-with-sxt.mjs` | Cross-reference a contract's bytecode hash against a published reference table with a Proof of SQL receipt | ✅ Stable. Verifies your SxT API key works before doing the Claude demo. |
-
-Both are vanilla Node.js (no TypeScript build step). They run against testnet and are designed to be safe to iterate on.
+Vanilla Node.js scripts that drive the publish-and-prove pipeline against Space and Time mainnet (SXT chain) and Base mainnet (EVM). Reproducible end-to-end from a fresh clone — see the root [`README.md`](../../README.md) for the five-command quickstart.
 
 ## Setup
-
-Install dependencies — these live in this scripts directory, not the main repo's `package.json`:
 
 ```bash
 cd examples/scripts
 npm install
+cp .env.example .env
+# edit .env to add PRIVATE_KEY, or run `node bootstrap.mjs --new-wallet`
 ```
 
-This installs:
-- `@polkadot/api` — Substrate RPC client for table creation/insert
-- `apache-arrow` — encodes rows as Arrow IPC for SxT chain ingestion
-- `csv-parse` — reads the input CSV
+The scripts use a single Ethereum private key. SXT chain accepts a special `EthEcdsa` signature variant for EVM-derived accounts (per the official `chain.spaceandtime.io` "Programmatic Table Creation" tutorial), so one key signs both Substrate extrinsics on the SXT chain and EVM transactions on Base. The `ethecdsa_signer.mjs` helper is lifted verbatim from those docs.
 
-Then set environment variables. The two scripts use different credentials:
+**Recommended:** dedicate a fresh Ethereum account to this work, not your main MetaMask. Reveal the private key for that account only, fund it on three networks (`bootstrap.mjs --status` reports exact shortfalls), and put the key in `.env`.
 
-| Variable | Used by | Where to get it |
+## Scripts
+
+### Pipeline — run in order via `bootstrap.mjs --run`
+
+| Script | Step | What it does |
 |---|---|---|
-| `SXT_API_KEY` | `audit-with-sxt.mjs` | chain.spaceandtime.io dashboard after wallet connect |
-| `SXT_OWNER_SEED` | `publish-dataset-cli.mjs` | A Substrate-format seed (sr25519 mnemonic or 0x-prefixed seed) for the account that owns the table. **Different from your MetaMask key** — see "Wallet seed" below. |
+| `publish-dataset-cli.mjs` | 1 | CSV → SXT chain-secured table. Auto-suffixes the namespace with the wallet address (chain rule), renders all columns `NOT NULL` (Proof of SQL rule), submits via `tables.createTables` + `indexing.submitData`. |
+| `save-proof-plans.mjs` | 2 | Calls `commitments_v1_evmProofPlan` on the SXT chain RPC for three queries (point-lookup, count, negative-lookup) and writes the EVM-encoded proof plans to `../data/proof-plans/`. |
+| `render-onchain-query.mjs` | 3 | Substitutes a proof plan + schema into `templates/OnchainQuery.sol.template` and writes `src/OnchainQuery/OnchainQuery.sol`. The hand-curated `StakersQuery.sol` is never overwritten. |
+| `deploy-onchain-query.mjs` | 4 | `forge create` wrapper that deploys whichever contract was last rendered (defaults to `StakersQuery` if no render has run). Writes `.deploy-state.json` for idempotency. Defaults to Base mainnet. |
+| `query-onchain.mjs` | 5 | Approves 100 SXT, calls `query()`, polls for the verified callback (`QueryRow` / `QueryEmpty` for `OnchainQuery`, `MembershipProven` / `MembershipNotFound` for `StakersQuery`). |
 
-## Signing — use your existing Ethereum key
+### Orchestration
 
-SxT chain accepts a special `EthEcdsa` signature variant for EVM-derived accounts. That means **a standard Ethereum private key signs SxT chain transactions directly** — no Substrate seed needed.
+| Script | Purpose |
+|---|---|
+| `bootstrap.mjs` | First-run setup + GO/NOT-GO probe. `--new-wallet` generates a fresh key, `--status` re-runs the probe, `--run` executes the full pipeline. |
 
-This matches the official chain.spaceandtime.io "Programmatic Table Creation" tutorial. The `ethecdsa_signer.mjs` helper in this directory is lifted verbatim from those docs.
+### Diagnostics
 
-### Recommended: a fresh ETH key, not your main MetaMask
+| Script | Purpose |
+|---|---|
+| `poll-callback.mjs` | Standalone poller for the `query()` callback. Use when `query-onchain.mjs` crashed mid-poll and you don't want to re-fire `query()` and burn another 100 SXT. Defaults to a different RPC for resilience. |
+| `inspect-query.mjs` | Reads a `query()` tx receipt, extracts the queryId, and scans the QueryRouter for `QueryRequested` / `QueryFulfilled` / `PayoutOccurred` / `QueryCancelled` events. Use to diagnose whether the executor has picked up your request. |
+| `check-balance.mjs` | SXT chain native balance for the wallet. |
+| `check-eth-sxt-balance.mjs` | Base ETH + SXT (ERC-20) balance + QueryRouter allowance. |
 
-Don't paste the private key for your main MetaMask account into a script. Instead:
+### Off-chain alternates
 
-1. In MetaMask, click "Add account" → create a new empty account dedicated to SxT testnet.
-2. Reveal the private key for **that new account only** (Account details → Show private key).
-3. Send testnet SXT credits from your existing funded MetaMask account to the new account's address — same chain.spaceandtime.io wallet flow you've used before.
-4. Put the private key in `.env` (gitignored):
-   ```
-   PRIVATE_KEY=0xyour_fresh_account_private_key
-   ```
+For cases where you want to validate the publish + plan steps without spending 100 SXT for an on-chain proof:
 
-The fresh account isolates the SxT-chain blast radius. If something goes wrong, only that account is affected — your main wallet stays untouched.
+| Script | Purpose |
+|---|---|
+| `audit-with-sxt.mjs` | REST API version of the audit cross-reference. Computes a contract bytecode hash and queries the published `KNOWN_EXPLOITS` table via the Studio REST API. Requires `SXT_API_KEY` from `app.spaceandtime.ai`. |
+| `verify-stakers.mjs` | REST API version of the membership query. Same proof, delivered as a JSON receipt instead of an on-chain event. Requires `SXT_API_KEY`. |
 
-### The chain rules that matter
+## Configuration
 
-The official docs spell out three constraints that apply whether you publish via UI or CLI:
+All scripts read from `.env` (gitignored). The full set of variables:
 
-1. **Namespace must end with your wallet address** (without `0x`, uppercase). The script auto-appends this — you provide the prefix, it computes the full namespace.
-2. **All columns must be `NOT NULL`** — chain rule for Proof of SQL determinism. The script renders `NOT NULL` on every column automatically.
-3. **Data insertion requires `IndexingPallet.SubmitDataForPrivilegedQuorum` permission.** Table creation works with any funded account. If your account lacks the insert permission, the script reports the create succeeded and tells you to load data via the chain.spaceandtime.io CSV upload UI instead.
+| Variable | Used by | Default |
+|---|---|---|
+| `PRIVATE_KEY` | all on-chain scripts | (required) |
+| `SXT_API_KEY` | `audit-with-sxt.mjs`, `verify-stakers.mjs` | (required for off-chain scripts only) |
+| `SXT_RPC` | publish, balance, proof-plan scripts | `wss://rpc.mainnet.sxt.network` |
+| `ETH_RPC` | deploy, query, balance, poll, inspect | `https://base.publicnode.com` |
+| `MAX_WAIT_MS` | `query-onchain.mjs`, `poll-callback.mjs` | `180000` (3 minutes) |
 
-## Usage
+## Common workflows
 
-### Publish a dataset
-
-Create `.env` in this directory:
-
-```
-PRIVATE_KEY=0xyour_fresh_eth_private_key
-```
-
-Then run:
+### From scratch, end-to-end
 
 ```bash
-node publish-dataset-cli.mjs \
-  ../data/known-exploits-sample.csv \
-  MY_AUDIT.KNOWN_EXPLOITS \
-  --schema ../data/known-exploits-sample.schema.json
+node bootstrap.mjs --new-wallet     # generate ETH key, write to .env
+# fund the printed address per bootstrap output
+node bootstrap.mjs --status         # confirm GO state
+node bootstrap.mjs --run            # publish → render → deploy → query
 ```
 
-The script transforms `MY_AUDIT.KNOWN_EXPLOITS` into the chain-required form `MY_AUDIT_<UPPERCASE_HEX_ADDRESS>.KNOWN_EXPLOITS` automatically. Note this full namespace — you'll need it when querying the table later (the audit script and the audit skill should reference the full namespace).
+### Re-query the same address (no redeploy)
 
-Expected output (success path):
-
-```
-▶ Reading ../data/known-exploits-sample.csv
-  Parsed 6 rows
-  Loaded explicit schema from ../data/known-exploits-sample.schema.json
-
-▶ CREATE TABLE statement:
-    CREATE TABLE MY_AUDIT.KNOWN_EXPLOITS (
-      BYTECODE_HASH VARCHAR NOT NULL,
-      EXPLOIT_TYPE VARCHAR,
-      ...
-    )
-
-▶ Connecting to wss://rpc.testnet.sxt.network
-  Connected. Chain: SxT Testnet
-  Owner address (sr25519): 5G...
-
-▶ Submitting CREATE TABLE transaction...
-  createTables included in block: 0xabc...
-  createTables finalized in block: 0xabc...
-
-▶ Encoding 6 rows as Apache Arrow IPC...
-  Encoded 712 bytes
-
-▶ Submitting INSERT transaction via api.tx.tables.insertIntoTable...
-  insert finalized in block: 0xdef...
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ✅ Published 6 rows to MY_AUDIT.KNOWN_EXPLOITS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-### Audit (verify the publish + run cross-reference)
+If you've already deployed and want to fire another proof for the same query:
 
 ```bash
-export SXT_API_KEY=your_api_key
-
-# Quick verification with the demo-marker hash
-node audit-with-sxt.mjs --demo
-
-# Or against a real source file (computes SHA-256 of source)
-node audit-with-sxt.mjs ../contracts/SampleToken.sol
+node query-onchain.mjs
+# costs another 100 SXT; emits a fresh callback event
 ```
 
-## Troubleshooting
+### Query a different address
 
-### Publish — "module error: …"
+The proof plan binds the address as a literal — to prove membership of a different address you must regenerate the plan and redeploy:
 
-Most likely the SxT chain returned a domain-specific error. Common causes:
+```bash
+# 1. Edit the SQL in save-proof-plans.mjs to use the new address
+# 2. Regenerate the plan + chain state hash
+node save-proof-plans.mjs
+# 3. Re-render the contract
+node render-onchain-query.mjs
+# 4. Recompile + redeploy
+cd ../contracts/sxt-onchain-query && forge build && cd ../../scripts
+rm ../contracts/sxt-onchain-query/.deploy-state.json
+node deploy-onchain-query.mjs
+# 5. Approve + query against the new contract
+node query-onchain.mjs
+```
 
-| Error fragment | Cause | Fix |
-|---|---|---|
-| `InsufficientBalance` | Account doesn't have enough credits | Fund credits at chain.spaceandtime.io |
-| `TableAlreadyExists` | The table was already created in a prior run | Pick a new table name or drop the existing one |
-| `InvalidSignature` | Seed doesn't match the funded account | Confirm the seed and funded account are the same |
-| `BadOrigin` | Chain version mismatch — the call shape changed | Check the SxT docs for the current `createTables` signature |
+### Diagnose a stuck query
 
-### Publish — "No matching insert method found"
+```bash
+node inspect-query.mjs 0x<queryTxHash>
+# shows queryId, callback config, payment timeout, and whether
+# QueryRouter has seen QueryFulfilled / PayoutOccurred / QueryCancelled
+```
 
-The script tries `insertIntoTable`, `insertData`, `insert`, `insertRows`, and `append` in order. If none match, it prints all available `api.tx.tables.*` methods. Pick the right one and update the `candidateMethods` array near the bottom of the script.
-
-This is the most common one-line tweak you'll need.
-
-### Audit — "401 / 403"
-
-Your `SXT_API_KEY` is wrong, expired, or doesn't have read permission on the table. Get a fresh key from chain.spaceandtime.io.
-
-### Audit — "no such table"
-
-The reference table isn't published yet. Run `publish-dataset-cli.mjs` first, or use the chain.spaceandtime.io UI per `DEMO.md` Tier 3 step 3.
-
-### Audit — "no proof receipt"
-
-The script tries four common field paths (`proofReceipt`, `proof_receipt`, `proof.receipt`, `proof.hash`). If yours is somewhere else, the raw response is printed — find the field, update the lookup in the script, and re-run.
-
-## What "iterate on against testnet" means
-
-This script is best-effort against current SxT docs. The pieces I'm confident about:
-- Polkadot.js connect + signAndSend flow ✓
-- CSV parse + Arrow IPC encoding ✓
-- Substrate keyring with sr25519/ed25519 ✓
-- The `createTables` call shape from SxT docs ✓
-
-The piece that may need tweaking:
-- The exact insert method name on `api.tx.tables`. The script prints what's available when it can't find what it tried, so the fix is one line.
-
-If you hit either of those, you can either:
-1. Edit `publish-dataset-cli.mjs` directly (one-line change to the method name).
-2. Tell me what the script printed and I'll update it.
+If the executor never fulfills, the contract's payment timeout (1 hour) lets you call `cancelQuery` on QueryRouter for a 100 SXT refund.
 
 ## Don't commit secrets
 
-This directory is in the same repo as the docs site. Don't commit your `SXT_OWNER_SEED` or `SXT_API_KEY`. The repo's root `.gitignore` already excludes `node_modules/`. Use a `.env.local` file (gitignored) for local secrets, or export them in your shell.
+`.env` is gitignored. The repo's root `.gitignore` also excludes `node_modules/` and forge build artifacts. Don't commit your `PRIVATE_KEY` or `SXT_API_KEY`.

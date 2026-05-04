@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "description": "Verifiable SQL on Space and Time — keeps agents inside the Proof of SQL surface.",
   "author": {
-    "name": "DreamSpace AI proposal"
+    "name": "SXT Tools"
   },
   "homepage": "https://docs.spaceandtime.io/docs/what-is-space-and-time-quick-intro",
   "license": "MIT",
-  "keywords": ["space-and-time", "proof-of-sql", "zk", "sql", "blockchain", "dreamspace"]
+  "keywords": ["space-and-time", "proof-of-sql", "zk", "sql", "blockchain", "sxt"]
 }

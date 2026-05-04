@@ -1,11 +1,11 @@
 {
-  "name": "dreamspace-ai-examples",
+  "name": "sxt-tools-examples",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Example scripts for the DreamSpace AI proposal — publish datasets and audit contracts against Space and Time testnet without leaving the CLI.",
+  "description": "Example scripts for sxt-tools — publish datasets to Space and Time mainnet and prove membership on Base mainnet via Proof of SQL.",
   "scripts": {
-    "generate": "node generate-substrate-account.mjs",
+    "bootstrap": "node bootstrap.mjs",
     "publish": "node publish-dataset-cli.mjs",
     "audit": "node audit-with-sxt.mjs"
   },
@@ -17,6 +17,7 @@
     "apache-arrow": "^17.0.0",
     "csv-parse": "^5.5.0",
     "dotenv": "^16.4.0",
-    "ethers": "^6.13.0"
+    "ethers": "^6.13.0",
+    "sxt-proof-of-sql-sdk": "^0.54.0"
   }
 }

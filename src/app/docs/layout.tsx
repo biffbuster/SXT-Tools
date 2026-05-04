@@ -9,38 +9,19 @@ const sidebarNav = [
     category: "Getting Started",
     items: [
       { title: "Overview", href: "/docs" },
-      { title: "Quick Start", href: "/docs/quick-start" },
+      { title: "Quick start", href: "/docs/quick-start" },
     ],
   },
   {
-    category: "Core Modules",
+    category: "Workflows",
     items: [
-      { title: "Auth & Identity", href: "/docs/auth" },
-      { title: "Wallet", href: "/docs/wallet" },
-      { title: "Query", href: "/docs/query" },
-      { title: "Contracts", href: "/docs/contracts" },
-      { title: "Networks", href: "/docs/networks" },
-      { title: "Components", href: "/docs/components" },
-      { title: "Deployment & Storage", href: "/docs/deployment" },
+      { title: "Generate, audit & deploy", href: "/docs/generate-audit-deploy" },
     ],
   },
   {
-    category: "Advanced",
+    category: "Reference",
     items: [
-      { title: "x402 Payment Protocol", href: "/docs/x402" },
-      { title: "ERC-8004 Trustless Agents", href: "/docs/erc-8004" },
-      { title: "Space and Time", href: "/docs/space-and-time" },
-      { title: "Marketplace", href: "/docs/marketplace" },
-    ],
-  },
-  {
-    category: "Examples",
-    items: [
-      { title: "Examples", href: "/docs/examples" },
-      { title: "ZK Search Engine", href: "/docs/examples/zk-search-engine" },
-      { title: "Onchain Yield Agent", href: "/docs/examples/onchain-yield-agent" },
-      { title: "Verified Data API", href: "/docs/examples/verified-data-api" },
-      { title: "Agent Marketplace", href: "/docs/examples/agent-marketplace" },
+      { title: "Space and Time primitives", href: "/docs/space-and-time" },
     ],
   },
 ];
@@ -60,7 +41,7 @@ export default function DocsLayout({
         <div className="flex items-center justify-between w-full max-w-[1600px] mx-auto">
           <div className="flex items-center gap-8">
             <Link href="/" className="flex items-center">
-              <img src="/dreamspace-logo.png" alt="DreamSpace SDK" className="h-7" />
+              <img src="/dreamspace-logo.png" alt="SXT Tools" className="h-7" />
             </Link>
             <div className="hidden md:flex items-center gap-6 text-sm">
               <Link

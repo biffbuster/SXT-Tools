@@ -27,12 +27,77 @@ You need:
 - **Schema and table name** — e.g., `MY_AUDIT.KNOWN_EXPLOITS`. Use `UPPERCASE_SNAKE_CASE`. The schema half is the namespace (lowercase letters + digits, starts with a letter); the table half is the name within that namespace.
 - **Column types** — one of `BOOLEAN`, `BIGINT`, `VARCHAR`, `DECIMAL75`, `TIMESTAMP`. Anything outside this list cannot carry a Proof of SQL query (see the `proof-of-sql-foundations` skill).
 - **Primary key column** — required. Must be `NOT NULL` and unique per row.
-- **Access mode** — one of:
-  - `Community` — anyone can write (suitable for public reference datasets that the community curates together).
-  - `Owner-Permissioned` — only the owner can write; anyone can read (most common for audit reference tables).
-  - `User-Verified` — owner writes; readers verify each row's signature on their own.
+- **Access mode** (the chain calls this `tableType`) — must be one of the values in the runtime's `SxtCoreTablesTableType` enum. As of the SXT mainnet runtime queried via `wss://rpc.mainnet.sxt.network`, the accepted values are:
+  - `Community` — open writes (default; suitable for public reference datasets that the community curates together).
+  - `PublicPermissionless` — public-readable, write-permissionless variant.
+  - `CoreBlockchain` — reserved for chain-indexed contract event tables.
+  - `SCI` — reserved for Smart Contract Indexing tables.
+  - `Testing` — for non-production experimentation. Takes an `InsertQuorumSize` argument.
+  - **Do not pass `OwnerPermissioned` or `UserVerified`** — these names appear in older SXT marketing material but are not valid on the current runtime and will fail with `Cannot map Enum JSON, unable to find 'OwnerPermissioned'`. If you need owner-only writes, achieve that by holding the only key permitted to call `indexing.submitData` on the table; the chain enforces that via signer identity, not via the `tableType` enum.
+
+  Always probe the live enum before generating values for an agent: `api.createType('SxtCoreTablesTableType').defKeys` returns the current set.
 
 You also need a wallet that has compute credits funded at https://chain.spaceandtime.io. Credits are funded with SXT, WETH, USDC, or USDT — the exact amount needed depends on payload size and is shown in the wallet flow.
+
+## Schema design — when the user has no `schema.json`
+
+Most users will hand you a CSV with no schema file. Don't stop and ask them to write one — *propose* one by inspecting the data, confirm the proposal, then write it. The decision flow:
+
+1. **Read the first ~100 rows** of the CSV with the Read tool. That's enough to type-infer reliably without loading the full file.
+2. **Per column, propose a SQL type** using the rules below. Show the user the proposal as a table before writing the file.
+3. **Pick a primary key candidate** by counting distinct values across the sample. The column with the highest cardinality (closest to 100% unique) and zero nulls is the right default. If two columns tie, pick the one whose name is more identifier-like (`id`, `address`, `hash`, `wallet`).
+4. **Confirm the proposal** with the user in one message. Show types + primary key + one example row, ask "Look right?" Don't write the file or run the publish until they say yes.
+5. **Write `<csv-name>.schema.json`** next to the CSV with the agreed shape and proceed.
+
+### Type judgment for ambiguous columns
+
+The chain's full set is `BOOLEAN | BIGINT | VARCHAR | DECIMAL75 | TIMESTAMP` (plus `BINARY` and the smaller int variants per the official Arrow type reference). When a column could be more than one, default this way:
+
+| Sample values look like | Default to | Why |
+|---|---|---|
+| `0x` followed by 40 hex chars | `VARCHAR` | EVM address; comparisons are exact, no arithmetic needed |
+| `0x` followed by 64 hex chars | `VARCHAR` | Hash (tx hash, bytecode hash, content hash); same reasoning |
+| Pure integer in normal range (≤ 2⁶³) | `BIGINT` | Native fixed-point, fast comparisons |
+| Decimal/float with money or financial naming (`amount`, `price`, `usd`, `balance`, `value`) | `DECIMAL75` | Floats break Proof of SQL determinism; ask user for `(precision, scale)` |
+| Boolean-ish (`true`/`false`, `0`/`1`, `yes`/`no`) — confirm normalization | `BOOLEAN` | Smallest type that fits |
+| ISO-8601 timestamp or unix epoch seconds/ms | `TIMESTAMP` | Use millisecond precision |
+| Free text, names, descriptions | `VARCHAR` | Catch-all |
+| Anything `NULL`-able | **Refuse to publish that column as-is** | Proof of SQL needs `NOT NULL`. Ask user to either drop the column, fill defaults, or filter rows with nulls |
+
+If you see types you don't recognize from this list (`JSON`, `ARRAY`, `BYTEA`, `FLOAT`, `DOUBLE`, `UUID`), tell the user the chain can't carry them today and propose a `VARCHAR` representation (e.g., serialize JSON to a string, store UUIDs as their canonical hex form).
+
+### Worked example
+
+User: *"Publish `validators.csv` to my SXT account."*
+
+Sample rows the agent sees from `Read('validators.csv', limit=5)`:
+```
+validator_id,operator_address,total_staked_usd,first_seen,is_slashed
+0xabc123,0xdef456,1234567.89,2025-09-12T14:00:00Z,false
+0x7890ab,0xcdef12,500000.00,2025-10-01T09:30:00Z,true
+```
+
+What the agent should propose back to the user:
+
+```
+Proposed schema for validators.csv:
+
+| Column            | Type            | Notes                              |
+|-------------------|-----------------|------------------------------------|
+| VALIDATOR_ID      | VARCHAR         | hex identifier, 100% unique        |
+| OPERATOR_ADDRESS  | VARCHAR         | EVM address                        |
+| TOTAL_STAKED_USD  | DECIMAL75(20,2) | financial; 2 decimal places        |
+| FIRST_SEEN        | TIMESTAMP       | ISO-8601, millisecond precision    |
+| IS_SLASHED        | BOOLEAN         | normalized true/false              |
+
+Primary key: VALIDATOR_ID (100% unique, no nulls in sample)
+Effective table reference: MY_VALIDATORS_<YOUR_ADDRESS>.VALIDATORS
+Access mode: Community (public reads + writes — confirm before mainnet)
+
+Confirm and I'll write the schema.json and run the publish.
+```
+
+This is the conversation pattern. Don't skip the confirmation step — schema decisions are committed onchain at publish time and can't be altered without dropping and re-creating the table.
 
 ## Two ways to publish
 
@@ -81,30 +146,36 @@ node examples/scripts/publish-dataset-cli.mjs \
 The script:
 
 1. Reads the CSV and schema.
-2. Connects to `wss://rpc.testnet.sxt.network`.
+2. Connects to the RPC in `SXT_RPC` env var. **Default is `wss://rpc.testnet.sxt.network` (CLI default); the chain.spaceandtime.io UI and the official "Programmatic Data Insertion" docs use `wss://rpc.mainnet.sxt.network`.** Funded credits land on whichever chain the funding flow targeted — usually mainnet, since the UI defaults there. Override with `SXT_RPC=wss://rpc.mainnet.sxt.network` per run when you want to publish to mainnet.
 3. Builds the namespace per chain rule: `<PREFIX>_<UPPERCASE_HEX_ADDRESS>` (auto-derived from your wallet).
 4. Renders `NOT NULL` on every column (chain rule for Proof of SQL determinism).
 5. Wraps the ethers Wallet with `EthEcdsaSigner`.
-6. Submits a batched transaction: `createNamespace` + `createTables`.
-7. Encodes rows as Apache Arrow IPC and submits an insert transaction.
-8. Prints finalized block hashes.
+6. Submits a batched transaction: `createNamespace` + `createTables`. **Idempotent on re-run** — if the runtime returns `tables.VersionAlreadyExists`, the script logs and proceeds straight to the insert step rather than aborting.
+7. Encodes rows as Apache Arrow IPC with **explicitly typed vectors** built from the schema (`vectorFromArray(values, new Utf8())` etc.). Implicit typing via `tableFromJSON` produces messages the runtime rejects with `indexing.ArrowExpectedRecordBatchMessage`.
+8. Submits the insert via **`api.tx.indexing.submitData({namespace, name}, batchId, ipcHex)`** — *not* `api.tx.tables.*`. The insert extrinsic lives on the `indexing` pallet per the official chain.spaceandtime.io "Programmatic Data Insertion" docs.
+9. Prints finalized block hashes for both the create batch and the insert.
 
 ### Key chain rules to remember
 
 - **Namespace must end with the wallet address (uppercase, without 0x).** The script appends this automatically. Your effective table reference becomes `<PREFIX>_<UPPERCASE_HEX_ADDRESS>.<TABLE>`.
 - **All columns must be `NOT NULL`** — Proof of SQL needs deterministic data, no null branches.
 - **DECIMAL preferred over FLOAT** for numeric data — fixed-point arithmetic is deterministic; floats aren't and break proofs.
-- **Data insertion requires `IndexingPallet.SubmitDataForPrivilegedQuorum` permission.** Table creation works with any funded account; if insert fails with a permission error, the table is created — load data via chain.spaceandtime.io CSV upload UI instead.
+- **Insert via `api.tx.indexing.submitData`, not `api.tx.tables.*`.** The `tables` pallet only exposes DDL (`createNamespace`, `createTables`, `dropTable`, etc.). Data inserts go through the `indexing` pallet. Some older internal tooling tried `tables.insertData` / `tables.insertIntoTable` — those don't exist on the current runtime.
+- **Some restricted table types may require additional indexing permissions.** Standard `Community` tables created from a funded account accept `submitData` with no extra setup (verified end-to-end on mainnet). If your table type or quorum config requires `IndexingPallet.SubmitDataForPrivilegedQuorum`, the chain returns a `BadOrigin` and you should load via the chain.spaceandtime.io UI or contact SxT for the permission grant.
 
 ### Minimal pattern (for agents authoring custom variants)
+
+The pattern below covers both stages — DDL on the `tables` pallet, then DML on the `indexing` pallet — and matches what the bundled `publish-dataset-cli.mjs` does end-to-end. Note the explicit Arrow typing and the separate insert call.
 
 ```javascript
 import { ApiPromise, WsProvider } from '@polkadot/api';
 import { Wallet } from 'ethers';
 import { EthEcdsaSigner } from './ethecdsa_signer.mjs';
+import { Table as ArrowTable, Utf8, vectorFromArray, tableToIPC } from 'apache-arrow';
 
+// Use mainnet RPC for production; the chain.spaceandtime.io UI defaults here.
 const api = await ApiPromise.create({
-  provider: new WsProvider('wss://rpc.testnet.sxt.network'),
+  provider: new WsProvider(process.env.SXT_RPC ?? 'wss://rpc.mainnet.sxt.network'),
   noInitWarn: true,
 });
 const wallet = new Wallet(process.env.PRIVATE_KEY);
@@ -112,11 +183,13 @@ const signer = new EthEcdsaSigner(wallet, api);
 
 const namespace = `MY_AUDIT_${wallet.address.slice(2).toUpperCase()}`;
 const table = 'KNOWN_EXPLOITS';
+const rows = [/* {BYTECODE_HASH, EXPLOIT_TYPE} objects */];
 
+// ── DDL: create namespace + table (idempotent on retry) ────────────
 const createNs = api.tx.tables.createNamespace(
   namespace, 0,
   `CREATE SCHEMA IF NOT EXISTS ${namespace}`,
-  'Community',
+  'Community',                                // see Access mode list above
   { UserCreated: 'agent' },
 );
 const createTbl = api.tx.tables.createTables([{
@@ -131,9 +204,35 @@ const createTbl = api.tx.tables.createTables([{
   source: { UserCreated: 'agent' },
 }]);
 
-await api.tx.utility.batchAll([createNs, createTbl])
-  .signAndSend(signer.address, { signer });
+try {
+  await api.tx.utility.batchAll([createNs, createTbl])
+    .signAndSend(signer.address, { signer });
+} catch (e) {
+  // On re-run the table is already there — ignore and proceed to insert.
+  if (!/VersionAlreadyExists|already exists/i.test(String(e?.message ?? e))) throw e;
+}
+
+// ── DML: build a typed Arrow table, then submitData on `indexing` ──
+const arrow = new ArrowTable({
+  BYTECODE_HASH: vectorFromArray(rows.map(r => r.BYTECODE_HASH), new Utf8()),
+  EXPLOIT_TYPE:  vectorFromArray(rows.map(r => r.EXPLOIT_TYPE),  new Utf8()),
+});
+const ipc = tableToIPC(arrow);
+const ipcHex = '0x' + Buffer.from(ipc).toString('hex');
+const batchId = '0x' + BigInt(Date.now()).toString(16).padStart(16, '0');
+
+await api.tx.indexing.submitData(
+  { namespace, name: table },
+  batchId,
+  ipcHex,
+).signAndSend(signer.address, { signer });
 ```
+
+Three details the runtime is strict about:
+
+- The RPC default for the chain.spaceandtime.io UI is mainnet (`wss://rpc.mainnet.sxt.network`); the testnet endpoint at `wss://rpc.testnet.sxt.network` has a separate credit balance.
+- The insert extrinsic is on the `indexing` pallet (`api.tx.indexing.submitData(table, batchId, dataHex)`), not `api.tx.tables.*`.
+- Arrow vectors must be explicitly typed via `vectorFromArray(values, new Utf8())`. `tableFromJSON(rows)` infers types and produces an IPC stream the runtime rejects with `indexing.ArrowExpectedRecordBatchMessage`.
 
 ## Verifying the publish
 
@@ -165,14 +264,14 @@ For audit-specific reference data, consider seeding from public sources like For
 - **Schema names** must be lowercase letters and digits, starting with a letter. Table names within a schema use `UPPERCASE_SNAKE_CASE`.
 - **Primary key is required** and must be `NOT NULL`.
 - **Compute credits are required** to publish. If the wallet hasn't funded credits at chain.spaceandtime.io, stop and direct the user there before attempting the publish.
-- **Testnet by default.** The RPC endpoint above (`wss://rpc.testnet.sxt.network`) is testnet. Production deployments require explicit confirmation that mainnet is the target — and at the time of writing, the user should confirm with their SXT contact whether mainnet publish is enabled for their account.
+- **CLI default vs UI default differ.** The `publish-dataset-cli.mjs` script defaults to `wss://rpc.testnet.sxt.network`. The chain.spaceandtime.io UI defaults to `wss://rpc.mainnet.sxt.network`, and that's also what the official "Programmatic Data Insertion" docs use. Funded compute credits land on whichever chain the funding flow targeted — almost always mainnet in practice. Always confirm with the user which chain to target before publishing, and surface the override (`SXT_RPC=wss://rpc.mainnet.sxt.network`) when mainnet is intended. Mainnet table commitments are permanent; only insert public, non-PII data.
 
 ## When to refuse
 
 Refuse and stop if:
 
 - The dataset contains PII (names, emails, government IDs). The table is committed onchain — once published, you cannot delete the commitment.
-- The user wants to publish proprietary data without understanding `Community` access mode means anyone can write, and `Owner-Permissioned` does not prevent anyone from reading.
+- The user wants to publish proprietary data without understanding that `Community` access mode means anyone can write, and that *no* mainnet `tableType` value prevents reads — proven SQL is publicly readable by design.
 - The wallet's seed is being passed via plain text in chat. Insist on env vars or a wallet UI.
 
 ## What this skill is not

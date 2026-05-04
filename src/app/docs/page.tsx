@@ -3,156 +3,91 @@ import Link from "next/link";
 export default function DocsOverview() {
   return (
     <>
-      <h1>
-        DreamSpace SDK
-      </h1>
+      <h1>SXT Tools</h1>
       <p className="docs-subtitle">
-        A TypeScript SDK that wraps the Space and Time data layer with smart contract tooling, wallet management, and deployment infrastructure for onchain development.
+        An agent skills marketplace for the Space and Time stack. Five protocol-aware skills compose a publish-and-prove pipeline that takes a CSV from a local file to a Base-mainnet event a smart contract can verify cryptographically. <strong>Claude Code is the first supported agent runtime;</strong> the skill format is portable Markdown, so additional agent integrations land cleanly without changing the skills.
       </p>
 
       <div className="docs-callout docs-callout-info">
-        <div className="docs-callout-title">What DreamSpace SDK Wraps</div>
-        Under the hood, DreamSpace uses <code>sxt-nodejs-sdk</code> for verifiable SQL queries with Proof of SQL, adds EVM smart contract deployment via OpenZeppelin templates, integrates Coinbase&apos;s x402 for micropayments, and connects to ERC-8004 for on-chain agent identity. DreamSpace is the glue layer — SxT is the data engine.
+        <div className="docs-callout-title">Implemented and runnable in this repo</div>
+        Five skills ship in <code>packages/plugins/</code>. The canonical demo dataset (<code>examples/data/sxt_stakers.csv</code>) is published to SXT mainnet; the bootstrap script wires the whole pipeline; the <code>StakersQuery.sol</code> contract is audit-clean and deploys to Base mainnet. See the README at the repo root for the run-it-yourself walkthrough.
       </div>
 
-      {/* Install */}
+      <h2 id="install">Install the marketplace</h2>
       <pre>
-        <code>$ npm install @dreamspace/sdk</code>
+        <code>{`/plugin marketplace add biffbuster/sxt-tools
+/plugin install dreamspace-data@sxt-tools
+/plugin install dreamspace-query@sxt-tools
+/plugin install dreamspace-contracts@sxt-tools`}</code>
       </pre>
+      <p>
+        Three plugins, five skills. Each skill is a single Markdown file with YAML frontmatter — no SDK installed, no runtime servers, no API tokens bundled.
+      </p>
 
-      {/* Quick Nav */}
+      <h2 id="quick-nav">Where to start</h2>
       <div className="docs-quicknav-grid">
         <Link href="/docs/quick-start" className="docs-quicknav-card">
-          <div className="docs-quicknav-card-title">Quick Start</div>
+          <div className="docs-quicknav-card-title">Quick start</div>
           <div className="docs-quicknav-card-desc">
-            Get up and running in 5 minutes with SxT authentication and your first verified query.
+            Five commands from a fresh clone to a verified Base-mainnet event. The bootstrap script wires the prereqs check, balance probes, and pipeline runner.
           </div>
         </Link>
-        <Link href="/docs/query" className="docs-quicknav-card">
-          <div className="docs-quicknav-card-title">Core Modules</div>
+        <Link href="/docs/spaceandtime-ai/overview" className="docs-quicknav-card">
+          <div className="docs-quicknav-card-title">What this repo ships</div>
           <div className="docs-quicknav-card-desc">
-            7 modules — Auth &amp; Identity, Wallet, Query, Contracts, Networks, Components, Deployment &amp; Storage.
+            Architecture of the publish-and-prove pipeline, the chain rules the skills carry for you, and the loop diagram showing where each skill fits.
           </div>
         </Link>
-        <Link href="/docs/x402" className="docs-quicknav-card">
-          <div className="docs-quicknav-card-title">Advanced Features</div>
+        <Link href="/docs/spaceandtime-ai/skills" className="docs-quicknav-card">
+          <div className="docs-quicknav-card-title">Skills catalog</div>
           <div className="docs-quicknav-card-desc">
-            x402 micropayments, ERC-8004 agent identity, Space and Time deep dive, and marketplace tooling.
+            All five shipped skills with their trigger phrases, refusal rules, and the SKILL.md format reference for authoring more.
           </div>
         </Link>
         <Link href="/docs/space-and-time" className="docs-quicknav-card">
-          <div className="docs-quicknav-card-title">Space and Time</div>
+          <div className="docs-quicknav-card-title">Space and Time primitives</div>
           <div className="docs-quicknav-card-desc">
-            Deep dive into Proof of SQL, indexed chains, on-chain verification, and real capabilities vs. limitations.
+            Background reading on the SXT pieces the skills touch — Proof of SQL surface, EVM proof plan flow, QueryRouter + Onchain Verifier addresses.
           </div>
         </Link>
       </div>
 
-      <h2 id="what-is-dreamspace">What is DreamSpace SDK?</h2>
+      <h2 id="what-it-does">How the pipeline works</h2>
       <p>
-        <em>
-          &ldquo;DreamSpace SDK is a TypeScript wrapper around the Space and Time decentralized data warehouse that adds smart contract deployment, wallet management, UI components, and a unified developer experience. SxT provides the verifiable data engine — DreamSpace makes it developer-friendly.&rdquo;
-        </em>
+        A user types a prompt into Claude Code. The agent loads the matching skill, reads the chain rules baked into the SKILL.md, and runs the workflow. Five skills, eight steps, three networks, one verifiable Base-mainnet event:
       </p>
+      <ol style={{ paddingLeft: "20px", color: "var(--light-grey)", fontSize: "15px", lineHeight: "1.85", marginBottom: "20px" }}>
+        <li><strong>Publish.</strong> <code>dreamspace-data:dataset-publish</code> infers a schema from the user&apos;s CSV, batches <code>tables.createNamespace</code> + <code>tables.createTables</code> on SXT chain, encodes data as Apache Arrow IPC, and submits via <code>indexing.submitData</code>.</li>
+        <li><strong>Plan.</strong> <code>dreamspace-query:run-proven-query</code> validates the SQL against the proven surface, then calls the chain RPC method <code>commitments_v1_evmProofPlan</code> for an EVM-encoded query plan + the chain state hash that anchors any future proof.</li>
+        <li><strong>Render.</strong> The render script substitutes the proof plan + column types into a Solidity template; the result compiles clean against the pinned SXT and OpenZeppelin Soldeer dependencies.</li>
+        <li><strong>Audit.</strong> <code>dreamspace-contracts:pre-deploy-audit</code> runs <code>forge build</code>, optional slither, optional cross-references against published SXT reference tables, and writes a structured <code>AUDIT_REPORT.md</code>.</li>
+        <li><strong>Deploy.</strong> <code>dreamspace-contracts:deploy-contract</code> wraps <code>forge create</code> with a mainnet confirmation gate, env-var key handling, and an idempotent state file.</li>
+        <li><strong>Verify.</strong> The deployed contract&apos;s <code>query()</code> function pulls 100 SXT from the caller, dispatches the request through the QueryRouter contract on Base mainnet (project default for cheap gas; Ethereum mainnet works identically), and waits for the SXT executor&apos;s callback. The callback verifies the Proof of SQL receipt against the on-chain Verifier in ~150K gas before invoking the contract&apos;s callback handler — which decodes the result and emits an event a smart contract can rely on without trusting SXT, the API, or the publishing wallet.</li>
+      </ol>
+
+      <h2 id="repo-layout">Repo layout</h2>
+      <pre>
+        <code>{`.
+├── .claude-plugin/marketplace.json     marketplace manifest (3 plugins)
+├── packages/plugins/                   the 5 shipped skills
+├── examples/
+│   ├── data/sxt_stakers.csv            demo dataset (2,062 staker addrs)
+│   ├── data/proof-plans/               EVM proof plan artifacts
+│   ├── contracts/sxt-onchain-query/
+│   │   ├── src/StakersQuery/           hand-curated demo contract
+│   │   ├── src/OnchainQuery/           generated for any user table
+│   │   └── templates/                  generic contract template
+│   └── scripts/                        bootstrap + the 8-step pipeline
+└── src/app/                            this docs site (Next.js)`}</code>
+      </pre>
+
+      <h2 id="next">Next</h2>
       <ul>
-        <li>
-          <strong>SxT data layer wrapper</strong> — Abstracts ED25519 authentication, biscuit token management, and raw SQL into simple <code>query.sql()</code> calls with automatic token refresh and TypeScript types.
-        </li>
-        <li>
-          <strong>Proof of SQL verification</strong> — Every SELECT query can include a ZK-SNARK proof that the data is untampered and the computation is correct. Verifiable on-chain via deployed contracts on Ethereum.
-        </li>
-        <li>
-          <strong>Smart contract tooling</strong> — Deploy ERC-20, ERC-721, ERC-1155, and custom Solidity contracts to any EVM chain. Built on OpenZeppelin templates.
-        </li>
-        <li>
-          <strong>Agent infrastructure</strong> — Integrates x402 (Coinbase) for micropayment-gated APIs and ERC-8004 for on-chain agent identity, reputation, and validation.
-        </li>
+        <li>Run it: <Link href="/docs/quick-start">Quick start</Link>.</li>
+        <li>Understand it: <Link href="/docs/spaceandtime-ai/overview">What this repo ships</Link>.</li>
+        <li>Use the catalog: <Link href="/docs/spaceandtime-ai/skills">Skills catalog</Link>.</li>
+        <li>Read the underlying primitives: <Link href="/docs/space-and-time">Space and Time primitives</Link>.</li>
       </ul>
-
-      <h2 id="core-modules">Core Modules</h2>
-      <div className="docs-module-grid">
-        <Link href="/docs/auth" className="docs-module-card">
-          <div className="docs-module-card-icon">🔐</div>
-          <div className="docs-module-card-title">Auth &amp; Identity</div>
-          <div className="docs-module-card-desc">
-            SxT ED25519 auth, SIWE sign-in, biscuit tokens, DID abstractions, ENS resolution, RBAC, and agent identity.
-          </div>
-        </Link>
-        <Link href="/docs/wallet" className="docs-module-card">
-          <div className="docs-module-card-icon">👛</div>
-          <div className="docs-module-card-title">Wallet</div>
-          <div className="docs-module-card-desc">
-            Multi-chain wallet creation, HD derivation, embedded wallets, and transaction signing.
-          </div>
-        </Link>
-        <Link href="/docs/query" className="docs-module-card">
-          <div className="docs-module-card-icon">🔍</div>
-          <div className="docs-module-card-title">Query</div>
-          <div className="docs-module-card-desc">
-            SQL queries against SxT-indexed blockchain data with Proof of SQL ZK proofs.
-          </div>
-        </Link>
-        <Link href="/docs/contracts" className="docs-module-card">
-          <div className="docs-module-card-icon">📜</div>
-          <div className="docs-module-card-title">Contracts</div>
-          <div className="docs-module-card-desc">
-            Deploy and interact with smart contracts on any EVM chain. OpenZeppelin templates included.
-          </div>
-        </Link>
-        <Link href="/docs/networks" className="docs-module-card">
-          <div className="docs-module-card-icon">🌐</div>
-          <div className="docs-module-card-title">Networks</div>
-          <div className="docs-module-card-desc">
-            Multi-chain config with separate SxT data and contract deployment chain support.
-          </div>
-        </Link>
-        <Link href="/docs/components" className="docs-module-card">
-          <div className="docs-module-card-icon">🧩</div>
-          <div className="docs-module-card-title">Components</div>
-          <div className="docs-module-card-desc">
-            Pre-built React components for wallet connect, NFT galleries, and token displays.
-          </div>
-        </Link>
-        <Link href="/docs/deployment" className="docs-module-card">
-          <div className="docs-module-card-icon">🚀</div>
-          <div className="docs-module-card-title">Deployment &amp; Storage</div>
-          <div className="docs-module-card-desc">
-            One-command deploy, IPFS pinning, Arweave permanent storage, NFT metadata, and edge CDN.
-          </div>
-        </Link>
-      </div>
-
-      <h2 id="advanced-features">Advanced Features</h2>
-      <div className="docs-module-grid">
-        <Link href="/docs/x402" className="docs-module-card">
-          <div className="docs-module-card-icon">💳</div>
-          <div className="docs-module-card-title">x402 Payment Protocol</div>
-          <div className="docs-module-card-desc">
-            Coinbase&apos;s HTTP-native micropayments. DreamSpace bridges x402 with SxT verified data APIs.
-          </div>
-        </Link>
-        <Link href="/docs/erc-8004" className="docs-module-card">
-          <div className="docs-module-card-icon">🤖</div>
-          <div className="docs-module-card-title">ERC-8004 Trustless Agents</div>
-          <div className="docs-module-card-desc">
-            On-chain agent identity, reputation, and validation registries. Live on Ethereum mainnet.
-          </div>
-        </Link>
-        <Link href="/docs/space-and-time" className="docs-module-card">
-          <div className="docs-module-card-icon">⏱️</div>
-          <div className="docs-module-card-title">Space and Time</div>
-          <div className="docs-module-card-desc">
-            Deep dive into Proof of SQL, indexed chains, on-chain verification, and honest limitations.
-          </div>
-        </Link>
-        <Link href="/docs/marketplace" className="docs-module-card">
-          <div className="docs-module-card-icon">🏪</div>
-          <div className="docs-module-card-title">Marketplace</div>
-          <div className="docs-module-card-desc">
-            NFT marketplaces and auction systems with built-in escrow and SxT analytics.
-          </div>
-        </Link>
-      </div>
     </>
   );
 }

@@ -1,206 +1,183 @@
+import Link from "next/link";
+
 export default function SpaceAndTime() {
   return (
     <>
-      <h1>Space and Time</h1>
-      <p>
-        Space and Time (SxT) is the core data layer powering DreamSpace SDK. It is a decentralized data warehouse that indexes blockchain data and makes it queryable via standard SQL, backed by <strong>Proof of SQL</strong> — a novel ZK-SNARK proof system that guarantees query results are computed correctly against untampered data.
+      <h1>Space and Time primitives</h1>
+      <p className="docs-subtitle">
+        Background on the SXT pieces the SXT Tools skills touch. Read this once to understand what the skills are wrapping; then use the skills to drive the workflow without re-deriving these rules per session.
       </p>
 
       <div className="docs-callout docs-callout-info">
-        <div className="docs-callout-title">How DreamSpace Uses Space and Time</div>
-        DreamSpace SDK wraps the <code>sxt-nodejs-sdk</code> NPM package, abstracting away ED25519 key management, biscuit token authorization, and resource tracking. Every <code>query.sql()</code> call goes through SxT&apos;s decentralized data warehouse. DreamSpace adds TypeScript types, parameterized queries, and simplified authentication on top.
+        <div className="docs-callout-title">Where this fits</div>
+        SXT is a Substrate-based L1 chain plus an EVM-side execution layer (QueryRouter + Verifier contracts on Ethereum and Base). The SXT Tools skills carry the chain rules; this page documents what those rules are.
       </div>
 
-      <h2 id="architecture">Architecture</h2>
+      <h2 id="proof-of-sql">Proof of SQL — what&apos;s provable</h2>
       <p>
-        SxT operates as an <strong>HTAP (Hybrid Transactional/Analytic Processing)</strong> system with two query engines:
+        Proof of SQL is a HyperKZG-based ZK proof system. Every <code>SELECT</code> against a committed SXT table can carry a proof that the result was computed correctly against the on-chain commitment. The proof verifies in roughly 7 ms locally or ~150K gas on the EVM via the Onchain Verifier.
       </p>
+      <h3 id="proven-surface">The proven surface (allowed)</h3>
       <ul>
-        <li><strong>OLTP engine</strong> — Low-latency transactional queries for real-time reads</li>
-        <li><strong>OLAP engine</strong> — Big data analytics for complex aggregations</li>
-        <li><strong>Indexer nodes</strong> — Collect and index data from major blockchains in near real-time</li>
-        <li><strong>Validator nodes</strong> — Verify data updates via cryptographic commitments</li>
-        <li><strong>Prover nodes</strong> — Generate ZK proofs using GPU acceleration (NVIDIA A100/T4)</li>
-        <li><strong>SXT Chain</strong> — A permissionless L1 blockchain (Substrate-based) with a ZK rollup on ZKsync&apos;s Elastic Chain for smart contract execution</li>
+        <li><strong>Statements</strong>: <code>SELECT … WHERE</code>, <code>GROUP BY</code>, <code>JOIN</code> (single chain only)</li>
+        <li><strong>Comparison</strong>: <code>=</code>, <code>&gt;=</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&lt;</code></li>
+        <li><strong>Logical</strong>: <code>AND</code>, <code>OR</code>, <code>NOT</code></li>
+        <li><strong>Arithmetic</strong>: <code>+</code>, <code>-</code>, <code>*</code></li>
+        <li><strong>Aggregates</strong>: <code>SUM</code>, <code>COUNT</code></li>
+        <li><strong>Column types</strong>: <code>BOOLEAN</code>, <code>BIGINT</code>, <code>VARCHAR</code>, <code>DECIMAL75</code>, <code>TIMESTAMP</code> (plus the smaller signed integer variants <code>TINYINT</code>, <code>SMALLINT</code>, <code>INT</code>, and <code>BINARY</code>)</li>
+      </ul>
+      <h3 id="not-provable">Outside the proven surface (will be refused in proven mode)</h3>
+      <ul>
+        <li><code>ORDER BY</code>, <code>LIMIT</code>, <code>DISTINCT</code></li>
+        <li><code>HAVING</code>, subqueries, CTEs, window functions (<code>ROW_NUMBER</code>, <code>RANK</code>)</li>
+        <li><code>UNION</code>, <code>EXCEPT</code>, <code>INTERSECT</code></li>
+        <li>Division (<code>/</code>), <code>AVG</code>, <code>MIN</code>, <code>MAX</code></li>
+        <li><code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code> — Proof of SQL is SELECT-only</li>
+        <li>Cross-chain JOINs</li>
+      </ul>
+      <p>
+        The <code>dreamspace-query:proof-of-sql-foundations</code> skill enforces this surface and offers rewrites for common requests outside it (e.g. <code>ORDER BY x DESC LIMIT 10</code> → bound the set with <code>WHERE</code>, sort client-side; <code>AVG(x)</code> → return <code>SUM(x)</code> + <code>COUNT(*)</code>, divide client-side).
+      </p>
+
+      <h2 id="publish-path">Publish path — Substrate extrinsics</h2>
+      <p>
+        Publishing a CSV onto SXT chain is a sequence of two extrinsic calls signed with an Ethereum private key via the <code>EthEcdsaSigner</code> wrapper around the standard Substrate API.
+      </p>
+      <pre><code>{`// Step 1: batched DDL
+api.tx.utility.batchAll([
+  api.tx.tables.createNamespace(namespace, 0,
+    \`CREATE SCHEMA IF NOT EXISTS \${namespace}\`,
+    'Community',
+    { UserCreated: 'agent' }),
+  api.tx.tables.createTables([{
+    ident: { namespace, name: table },
+    createStatement: \`CREATE TABLE \${namespace}.\${table} (
+      STAKER VARCHAR NOT NULL,
+      PRIMARY KEY (STAKER)
+    )\`,
+    tableType: 'Community',
+    commitment: { Empty: { hyperKzg: true } },
+    source: { UserCreated: 'agent' },
+  }]),
+])
+
+// Step 2: insert via the indexing pallet (NOT api.tx.tables)
+api.tx.indexing.submitData(
+  { namespace, name: table },
+  batchId,
+  ipcHex,            // Apache Arrow IPC bytes
+)`}</code></pre>
+
+      <h3 id="chain-rules">Chain rules the publish path must follow</h3>
+      <ul>
+        <li><strong>Namespace must end with the wallet address</strong> (uppercase hex, no <code>0x</code>). The publish CLI auto-suffixes; effective form: <code>&lt;PREFIX&gt;_&lt;UPPERCASE_HEX_ADDRESS&gt;</code>.</li>
+        <li><strong>Every column <code>NOT NULL</code></strong>. Proof of SQL needs deterministic, branchless data.</li>
+        <li><strong>Insert lives on <code>api.tx.indexing.submitData</code></strong> — not <code>api.tx.tables.*</code>. Older internal samples got this wrong.</li>
+        <li><strong>Arrow vectors must be explicitly typed</strong>. <code>tableFromJSON</code> infers types and produces an IPC stream the runtime rejects with <code>indexing.ArrowExpectedRecordBatchMessage</code>. Build with <code>vectorFromArray(values, new Utf8())</code>.</li>
+        <li><strong>Mainnet <code>tableType</code> enum</strong> is <code>Community | PublicPermissionless | CoreBlockchain | SCI | Testing</code>. The names <code>OwnerPermissioned</code> / <code>UserVerified</code> appear in older marketing material but are not on the current runtime.</li>
+        <li><strong>Re-running is safe</strong>. The publish script catches <code>tables.VersionAlreadyExists</code> and proceeds to insert.</li>
       </ul>
 
-      <h2 id="authentication">Authentication</h2>
+      <h2 id="query-path">Query path — off-chain vs onchain</h2>
       <p>
-        SxT uses <strong>ED25519 key pairs</strong> for authentication and <strong>biscuit tokens</strong> for granular authorization. DreamSpace manages this automatically, but understanding the underlying system is important.
+        Two paths, depending on who consumes the result.
       </p>
-      <pre><code>{`// Under the hood, DreamSpace handles this for you:
-// 1. Generate ED25519 key pair
-// 2. Request auth code from SxT
-// 3. Sign auth code with private key
-// 4. Exchange for access token (valid 25 min) + refresh token (valid 30 min)
-// 5. Generate biscuit tokens with granular permissions
 
-// DreamSpace simplifies this to:
-import { DreamSpace } from '@dreamspace/sdk';
+      <h3 id="off-chain">Off-chain: REST API (for SXT-managed tables)</h3>
+      <p>
+        For SXT-managed core tables (<code>ETHEREUM.BLOCKS</code> etc.), POST SQL to the prover at <code>https://api.makeinfinite.dev/v1/prove</code>. Auth is a JWT obtained by exchanging a Studio API key at <code>https://proxy.api.makeinfinite.dev/auth/apikey</code>. The <code>sxt-proof-of-sql-sdk</code> npm package wraps both calls.
+      </p>
+      <p>
+        Studio API keys come from <code>app.spaceandtime.ai</code> → My Account → API Authentication. They are different from <code>chain.spaceandtime.io</code> credentials; the two account systems are unrelated.
+      </p>
 
-const ds = new DreamSpace({
-  sxtApiKey: process.env.SXT_API_KEY,
+      <h3 id="onchain">Onchain: EVM proof plan + QueryRouter (for user-published tables)</h3>
+      <p>
+        For tables published via direct extrinsic (the path the <code>dataset-publish</code> skill takes), the canonical query path is onchain via QueryRouter.
+      </p>
+      <pre><code>{`// 1. Build the EVM proof plan from the chain RPC (no auth)
+curl -X POST https://rpc.mainnet.sxt.network -H "Content-Type: application/json" -d '{
+  "jsonrpc": "2.0", "id": 1, "method": "commitments_v1_evmProofPlan",
+  "params": { "query": "SELECT STAKER FROM MY_AUDIT_<addr>.STAKERS WHERE STAKER = '\\''0x...'\\''" }
+}'
+// → { "result": { "proofPlan": "0x...", "at": "0x<chainStateHash>" } }
+
+// 2. Drop the proofPlan into a Solidity contract
+bytes public constant QUERY_PLAN = hex"...";
+
+// 3. Submit via QueryRouter
+IQueryRouter.Query memory q = IQueryRouter.Query({
+  innerQuery: QUERY_PLAN,
+  parameters: ParamsBuilder.serializeParamArray(new bytes[](0)),
+  version: VERSION,
+  metadata: "",
 });
+IQueryRouter(QUERY_ROUTER).requestQuery(q, callback, payment);
 
-await ds.init(); // Handles all auth automatically`}</code></pre>
+// 4. The SXT executor proves the SQL, the OnchainVerifier validates the
+//    proof inside QueryRouter (~150K gas), and the result reaches your
+//    callback as verified bytes.`}</code></pre>
 
-      <h2 id="biscuit-tokens">Biscuit Token Authorization</h2>
-      <p>
-        Biscuit tokens are cryptographically verifiable, decentralized authorization tokens with embedded permission rules. Each token is scoped to specific tables and operations.
-      </p>
-      <pre><code>{`// Biscuit permissions in SxT:
-// ddl_create  — Create tables/schemas
-// ddl_drop    — Drop tables
-// ddl_alter   — Modify table structure
-// dml_insert  — Insert records
-// dml_delete  — Delete records
-// dml_update  — Update records
-// dql_select  — Query records
+      <h2 id="addresses">Onchain addresses</h2>
+      <p>Verified against <code>docs.spaceandtime.io</code>. Re-verify before any production deploy — addresses can change on a redeploy.</p>
+      <table className="comparison-table">
+        <thead>
+          <tr>
+            <th>Component</th>
+            <th>Network</th>
+            <th>Address</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>QueryRouter</strong></td>
+            <td>Ethereum + Base mainnet</td>
+            <td><code>0x220a7036a815a1Bd4A7998fb2BCE608581fA2DbB</code></td>
+          </tr>
+          <tr>
+            <td><strong>Onchain Verifier</strong></td>
+            <td>Ethereum mainnet</td>
+            <td><code>0x55780Ba21EdFBbFEb7033a0F2FC5Cf55Cd62ACf9</code></td>
+          </tr>
+          <tr>
+            <td><strong>Onchain Verifier</strong></td>
+            <td>Base mainnet</td>
+            <td><code>0x13b7463a07Aac6Bd483E4329a7F6768Da1A65518</code></td>
+          </tr>
+          <tr>
+            <td><strong>SXT (ERC-20)</strong></td>
+            <td>Base mainnet (project default)</td>
+            <td><code>0xA2c22252cDc8b7cDdEe1B0b2E242818509fCf7b8</code></td>
+          </tr>
+          <tr>
+            <td><strong>SXT (ERC-20)</strong></td>
+            <td>Ethereum mainnet</td>
+            <td><code>0xE6Bfd33F52d82Ccb5b37E16D3dD81f9FFDAbB195</code></td>
+          </tr>
+          <tr>
+            <td><strong>SXTChainFunding</strong></td>
+            <td>Ethereum mainnet</td>
+            <td><code>0xb1bc1d7eb1e6c65d0de909d8b4f27561ef568199</code></td>
+          </tr>
+        </tbody>
+      </table>
 
-// DreamSpace manages biscuit tokens automatically per-table
-// For advanced use, you can create custom tokens:
-import { auth } from '@dreamspace/sdk';
-
-const token = await auth.createBiscuitToken({
-  permissions: ['dql_select', 'dml_insert'],
-  resources: ['MY_APP.USER_PROFILES'],
-});`}</code></pre>
-
-      <h2 id="proof-of-sql">Proof of SQL Deep Dive</h2>
-      <p>
-        Proof of SQL uses polynomial commitment schemes with a multilinear sum-check protocol. The process works as follows:
-      </p>
+      <h2 id="costs">Costs and limits</h2>
       <ul>
-        <li><strong>Data ingestion:</strong> Data enters SxT, the verifier computes a commitment digest using native polynomial commitment schemes (not Merkle trees)</li>
-        <li><strong>Query parsing:</strong> SQL is parsed into an Abstract Syntax Tree (AST)</li>
-        <li><strong>Execution + witness:</strong> Query executes against tamperproof tables, generating a witness of intermediate computation states</li>
-        <li><strong>Proof generation:</strong> Witness is committed using homomorphic commitment schemes, polynomial constraints are constructed, and a sum-check protocol validates correctness</li>
-        <li><strong>Verification:</strong> Takes approximately <strong>7ms</strong> — can be done locally or on-chain</li>
-      </ul>
-      <p>
-        Supported commitment schemes: <strong>HyperKZG</strong> (default), <strong>Dory</strong>, <strong>Dynamic Dory</strong>.
-      </p>
-
-      <h2 id="performance">Real-World Performance</h2>
-      <p>
-        Benchmarks on a single NVIDIA A100 GPU with 10 million rows:
-      </p>
-      <ul>
-        <li>Simple filtering: ~250–300ms</li>
-        <li>Complex multi-condition filtering: ~350–400ms</li>
-        <li>GROUP BY aggregation: ~400–500ms</li>
-        <li>JOIN operations: ~500–700ms</li>
-        <li>Proof verification: ~7ms per query</li>
-        <li>On-chain verification: under 150k gas</li>
-      </ul>
-
-      <h2 id="supported-data">Indexed Blockchain Data</h2>
-      <p>
-        SxT currently indexes the following chains:
-      </p>
-      <ul>
-        <li><strong>Ethereum</strong> — Full transaction history, ERC-20/721/1155 events, DeFi protocol data (Uniswap, Aave, etc.)</li>
-        <li><strong>Bitcoin</strong> — Block and transaction data</li>
-        <li><strong>Polygon</strong> — Transactions, tokens, and DeFi events</li>
-        <li><strong>ZKsync</strong> — Transaction and event indexing</li>
-        <li><strong>Sui</strong> — Object and transaction indexing</li>
-        <li><strong>Avalanche</strong> — Transaction and event data</li>
+        <li><strong>Publish</strong>: ~0.001 SxT chain native for the create-batch + insert. Funded via the SXTChainFunding contract on Ethereum mainnet.</li>
+        <li><strong>EVM proof plan</strong>: free (a JSON-RPC call to the chain).</li>
+        <li><strong>Onchain query()</strong>: 100 SXT (ERC-20) per <code>requestQuery</code> call to QueryRouter, plus EVM gas for the deploy + approve + query transactions (~$1–5 on Base, ~$30–80 on Ethereum mainnet).</li>
+        <li><strong>Row cap</strong>: 10,000 rows per proven query result.</li>
+        <li><strong>Proof verification</strong>: ~7 ms locally, ~150K gas on the EVM Verifier.</li>
+        <li><strong>Callback timeout</strong>: 1 hour by contract convention; payment refunds if the executor never fulfills.</li>
       </ul>
 
-      <div className="docs-callout docs-callout-warning">
-        <div className="docs-callout-title">Coming Soon</div>
-        Base, Arbitrum, Optimism, and BNB Chain indexing are planned but not yet available. DreamSpace will integrate these as soon as SxT enables support.
-      </div>
-
-      <h2 id="on-chain-contracts">On-Chain Contracts</h2>
-      <p>
-        SxT has deployed ZKpay relayer and verifier contracts for submitting queries and verifying proofs on-chain:
-      </p>
-      <pre><code>{`// ZKpay Query Relayer Contracts
-// Ethereum Mainnet: 0x27d4d2af364c1ad2ebdb2a28d6cb7b99ede1d450
-// Ethereum Sepolia: 0xA735143283a6E686723403A820841E5774951a63
-
-// On-Chain Verifier Contracts
-// Ethereum Mainnet: 0x84d6795ff1fCc224De328C86C318fABC396826B0
-// Ethereum Sepolia: 0x99b3c29dDC225F75f9248c863379b195Ef9D82C2
-
-// Smart contracts can request ZK-proven query results via ZKpay:
-// 1. Client contract calls ZKpay relayer with SQL + payment (USDC or SXT)
-// 2. SxT indexer picks up the on-chain event
-// 3. Query executes, Proof of SQL generates ZK proof
-// 4. Results + proof return on-chain
-// 5. Verifier contract validates the proof
-// 6. Client contract receives results via zkPayCallback`}</code></pre>
-
-      <h2 id="for-agents">For AI Agents</h2>
-      <p>
-        Space and Time is powerful for AI agents that need verifiable data to make decisions. An agent can query market conditions, verify the data via Proof of SQL, and submit the proof to a smart contract before executing trades.
-      </p>
-      <pre><code>{`// Agent queries market data with ZK proof
-const marketData = await query.sql(\`
-  SELECT
-    CONTRACT_ADDRESS,
-    SUM(VALUE) as TOTAL_VOLUME
-  FROM ETHEREUM.TOKEN_ERC20_TRANSFERS
-  WHERE BLOCK_NUMBER > 19500000
-  GROUP BY CONTRACT_ADDRESS
-  LIMIT 10
-\`, { proof: true });
-
-// Agent submits proof to smart contract via ZKpay
-// The contract verifies data authenticity before allowing execution
-await contracts.call('AgentTradingVault', 'executeWithProof', {
-  args: [marketData.rows[0].CONTRACT_ADDRESS, tradeAmount, marketData.proof],
-});`}</code></pre>
-
-      <h2 id="for-users">For Users</h2>
-      <p>
-        Users benefit through transparent, verifiable dashboards. Instead of trusting a backend server, users can independently verify that the data they see is correct via the on-chain verifier.
-      </p>
-      <pre><code>{`// User-facing portfolio with verified data
-const portfolio = await query.sql(\`
-  SELECT
-    CONTRACT_ADDRESS,
-    SUM(VALUE) as BALANCE
-  FROM ETHEREUM.TOKEN_ERC20_WALLET_BALANCES
-  WHERE WALLET_ADDRESS = :userAddress
-  GROUP BY CONTRACT_ADDRESS
-\`, {
-  userAddress: '0xUser...',
-  proof: true,
-});
-
-// Display with a "Verified by Space and Time" badge
-// Users can check the proof against the on-chain verifier`}</code></pre>
-
-      <h2 id="capabilities">What Space and Time Can Do</h2>
+      <h2 id="see-also">See also</h2>
       <ul>
-        <li>ANSI-compliant SQL on indexed blockchain data (OLTP + OLAP engines)</li>
-        <li>ZK-proven query results for SELECT/WHERE/JOIN/GROUP BY/SUM/COUNT</li>
-        <li>Custom table creation with granular biscuit token permissions</li>
-        <li>Cross-table JOINs between blockchain and custom application data</li>
-        <li>On-chain proof verification via deployed verifier contracts (Ethereum)</li>
-        <li>ZKpay smart contract query relayer for trustless data feeds</li>
-        <li>Kafka-based streaming for high-volume data ingestion into custom tables</li>
-        <li>Protocol-specific indexed tables (Uniswap, Aave, hundreds more)</li>
-        <li>Sub-second proof generation on GPU-accelerated prover nodes</li>
-      </ul>
-
-      <h2 id="limitations">What Space and Time Cannot Do (Current Limitations)</h2>
-      <div className="docs-callout docs-callout-warning">
-        <div className="docs-callout-title">Honest Limitations</div>
-        DreamSpace is transparent about the current capabilities and limitations of Space and Time.
-      </div>
-      <ul>
-        <li><strong>No real-time WebSocket streaming</strong> — SxT uses polling-based data access. Kafka streaming is for data ingestion (writing in), not query result streaming (pushing out). For real-time events, use direct RPC subscriptions.</li>
-        <li><strong>No cross-chain JOINs</strong> — You cannot JOIN tables from different blockchains in a single query (e.g., ETHEREUM + POLYGON).</li>
-        <li><strong>Proof of SQL is SELECT-only</strong> — INSERT, UPDATE, DELETE do not generate proofs. Only a subset of SELECT queries are provable (no subqueries, window functions, AVG, MIN, MAX, DISTINCT, UNION, ORDER BY, or division).</li>
-        <li><strong>Limited chain indexing</strong> — Base, Arbitrum, Optimism, and BNB Chain are not yet indexed. Currently: Ethereum, Bitcoin, Polygon, ZKsync, Sui, Avalanche.</li>
-        <li><strong>10,000 row limit</strong> per query result. Use pagination for larger datasets.</li>
-        <li><strong>On-chain verifier contracts</strong> are only on Ethereum Mainnet and Sepolia. Base and ZKsync contract deployments are coming soon.</li>
-        <li><strong>Custom table storage is centralized</strong> — blockchain-indexed tables are decentralized, but custom tables are stored on SxT infrastructure.</li>
-        <li><strong>Node.js requirement</strong> — The SxT SDK requires Node.js &gt;= 19.8.0 with the <code>--experimental-wasm-modules</code> flag.</li>
-        <li><strong>Auth token expiry</strong> — Access tokens expire after 25 minutes, refresh tokens after 30 minutes. DreamSpace handles auto-refresh.</li>
+        <li>Repo&apos;s end-to-end demo: <Link href="/docs/quick-start">Quick start</Link>.</li>
+        <li>Skill catalog with refusal rules and trigger phrases: <Link href="/docs/spaceandtime-ai/skills">Skills catalog</Link>.</li>
+        <li>Architecture diagram + the loop the skills compose into: <Link href="/docs/spaceandtime-ai/overview">What this repo ships</Link>.</li>
+        <li>Authoritative SXT reference contracts: <a href="https://github.com/spaceandtimefdn/sxt-chain-examples" target="_blank" rel="noopener noreferrer">spaceandtimefdn/sxt-chain-examples</a>.</li>
       </ul>
     </>
   );

@@ -18,25 +18,29 @@ This skill keeps you inside the surface that can actually carry a proof. Anythin
 
 ## The proven SQL surface (allowed)
 
-When the user wants a verifiable result, every clause and operator must come from this list:
+When the user wants a verifiable result, every clause and operator must come from this list. Verified against the [Proof of SQL syntax spec](https://github.com/spaceandtimelabs/sxt-proof-of-sql/blob/main/docs/SQLSyntaxSpecification.md).
 
-- **Statements**: `SELECT … WHERE`, `GROUP BY`, `JOIN` (single chain only — see Hard limits)
-- **Comparison**: `=`, `>=`, `<=`, `>`, `<`
+- **Statements**: `SELECT … WHERE`, `GROUP BY`, `LIMIT`, `OFFSET`, `UNION ALL`
+- **JOIN**: only **inner joins on a single column** — no other join types or multi-column joins
+- **Comparison**: `=`, `!=`, `>=`, `<=`, `>`, `<` (decimal inequality only up to 38 digits)
 - **Logical**: `AND`, `OR`, `NOT`
 - **Arithmetic**: `+`, `-`, `*`
 - **Aggregates**: `SUM`, `COUNT`
-- **Column types**: `BOOLEAN`, `BIGINT`, `VARCHAR`, `DECIMAL75`, `TIMESTAMP`
+- **Column types**: `Boolean`, `Uint8`, `TinyInt`, `SmallInt`, `Int`, `BigInt`, `Int128`, `Decimal75`, `Varchar`, `Varbinary`, `Timestamp`
+
+The identifier `count` is reserved and cannot be used as a column alias.
 
 ## Outside the proven surface (refuse)
 
 Do **not** generate a verified query that uses any of the following. If the user wants a proof and asks for one of these, refuse with the reason:
 
-- `ORDER BY`, `LIMIT`, `DISTINCT`
-- `HAVING`, subqueries, CTEs, window functions (`ROW_NUMBER`, `RANK`)
-- `UNION`, `EXCEPT`, `INTERSECT`
+- `ORDER BY`, `DISTINCT`, `HAVING`
+- Subqueries, CTEs, window functions (`ROW_NUMBER`, `RANK`)
+- Plain `UNION`, `EXCEPT`, `INTERSECT` (only `UNION ALL` is in the proven surface)
+- Outer / left / right / full joins, multi-column joins
 - Division (`/`), `AVG`, `MIN`, `MAX`
+- String/binary operations beyond equality / inequality
 - `INSERT`, `UPDATE`, `DELETE` — Proof of SQL is SELECT-only
-- Cross-chain JOINs — joining `ETHEREUM.*` with `POLYGON.*` (or any two chain schemas) is not supported in the proven path
 
 When refusing, offer the user one of two paths:
 
@@ -48,10 +52,12 @@ When refusing, offer the user one of two paths:
 
 ## Hard limits
 
-- **Row cap**: 10,000 rows per query result.
-- **Latency**: proof generation adds 250 ms – 2 s depending on query and table size.
+- **Latency**: proof generation typically adds sub-second to a few seconds depending on query and table size; benchmarks show sub-second on 1M+ rows.
+- **Decimal precision**: full Decimal75 supports 75 digits, but inequality (`<`, `>`, `<=`, `>=`) is limited to 38 digits.
 - **Smart contract indexing supported on**: chains where SXT's indexer can register a deployed contract for event/state tracking. Check chain.spaceandtime.io for the current list of supported chains for indexing.
 - **Onchain verifier deployed on**: Ethereum mainnet, Base mainnet.
+
+For result-set row caps, check the response from the analytics endpoint or the Studio Workbench — caps may be per-API-tier rather than a fixed number, and have changed over time.
 
 ## Table sources you can query
 
@@ -74,9 +80,7 @@ Follow this checklist in order:
 2. Walk every clause and operator against the proven surface above.
 3. If the query is outside the surface, refuse and offer the rewrite or the unproven fallback.
 4. Otherwise, generate the SQL.
-5. **Submit** via one of two paths:
-   - **Future DreamSpace SDK** (proposed, not yet shipped): `await query.sql(sql, { proof: true })`
-   - **Public SXT REST API** (works today on testnet): `POST https://api.makeinfinite.dev/v2/sql` with body `{ "sqlText": "...", "proveExecution": true }` and an API key in the auth header.
+5. **Submit** via the public SXT REST API: `POST https://api.makeinfinite.dev/v2/sql` with body `{ "sqlText": "...", "proveExecution": true }` and an API key in the auth header.
 6. Verify the proof receipt returned alongside the result before relying on the data.
 
 ## Onchain consumption

@@ -23,7 +23,10 @@
  *                  key dedicated to SxT testnet, NOT your main MetaMask.
  *
  * Optional env vars:
- *   SXT_RPC        WebSocket endpoint. Default: wss://rpc.testnet.sxt.network
+ *   SXT_RPC        WebSocket endpoint. Default: wss://rpc.mainnet.sxt.network
+ *                  (matches the canonical spaceandtimefdn/sxt-chain-examples tutorial).
+ *                  Override to wss://rpc.testnet.sxt.network for testnet.
+ *                  Note: testnet and mainnet have separate credit balances.
  *   SXT_TABLE_TYPE "Community" | "OwnerPermissioned" | "UserVerified". Default: Community
  *
  * IMPORTANT:
@@ -40,13 +43,19 @@
 
 import 'dotenv/config';
 import { ApiPromise, WsProvider } from '@polkadot/api';
-import { tableFromJSON, tableToIPC } from 'apache-arrow';
+import {
+  Table as ArrowTable,
+  vectorFromArray,
+  tableToIPC,
+  Utf8, Binary, Bool, Int8, Int16, Int32, Int64,
+  TimestampMillisecond,
+} from 'apache-arrow';
 import { parse as parseCsv } from 'csv-parse/sync';
 import { Wallet } from 'ethers';
 import { readFileSync, existsSync } from 'node:fs';
 import { EthEcdsaSigner } from './ethecdsa_signer.mjs';
 
-const RPC = process.env.SXT_RPC ?? 'wss://rpc.testnet.sxt.network';
+const RPC = process.env.SXT_RPC ?? 'wss://rpc.mainnet.sxt.network';
 const TABLE_TYPE = process.env.SXT_TABLE_TYPE ?? 'Community';
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -105,10 +114,13 @@ function inferColumnTypes(rows) {
   return types;
 }
 
-function buildCreateStatement(namespace, table, columnTypes, primaryKey) {
-  // Chain rule: every column must be NOT NULL for Proof of SQL determinism.
+function buildCreateStatement(namespace, table, columnTypes) {
+  // Mirrors spaceandtimefdn/sxt-chain-examples → tutorials/create_hello_world_table.
+  // NOT NULL on every column (Proof of SQL determinism rule). No PRIMARY KEY clause —
+  // the canonical SXT example omits it, and tables created with a PRIMARY KEY fail to
+  // promote into the dreamspace.xyz / Studio MAINNET catalog (the indexer skips them,
+  // so the on-chain QueryRouter executor silently drops queries).
   const lines = Object.entries(columnTypes).map(([col, t]) => `  ${col} ${t} NOT NULL`);
-  lines.push(`  PRIMARY KEY (${primaryKey})`);
   return `CREATE TABLE ${namespace}.${table} (\n${lines.join(',\n')}\n)`;
 }
 
@@ -192,7 +204,6 @@ async function main() {
 
   // ─── Determine schema ─────────────────────────────────────────────────
   let columnTypes;
-  let primaryKey;
 
   if (args.schemaPath) {
     if (!existsSync(args.schemaPath)) {
@@ -201,18 +212,16 @@ async function main() {
     }
     const schemaJson = JSON.parse(readFileSync(args.schemaPath, 'utf8'));
     columnTypes = schemaJson.columns;
-    primaryKey = schemaJson.primaryKey;
-    if (!columnTypes || !primaryKey) {
-      console.error('✗ Schema file must contain "columns" object and "primaryKey" string.');
+    if (!columnTypes) {
+      console.error('✗ Schema file must contain "columns" object.');
       process.exit(1);
     }
     console.log(`  Loaded explicit schema from ${args.schemaPath}`);
   } else {
     columnTypes = inferColumnTypes(rows);
-    primaryKey = Object.keys(columnTypes)[0];
     console.log('  Inferred column types (pass --schema for explicit control):');
     for (const [c, t] of Object.entries(columnTypes)) {
-      console.log(`    ${c}: ${t}${c === primaryKey ? ' (PRIMARY KEY, default)' : ''}`);
+      console.log(`    ${c}: ${t}`);
     }
   }
 
@@ -238,7 +247,7 @@ async function main() {
   console.log(`▶ Effective namespace: ${namespace}`);
   console.log(`  Effective table reference: ${namespace}.${table}`);
 
-  const createStatement = buildCreateStatement(namespace, table, columnTypes, primaryKey);
+  const createStatement = buildCreateStatement(namespace, table, columnTypes);
   console.log('');
   console.log('▶ CREATE TABLE statement:');
   console.log(createStatement.split('\n').map((l) => `    ${l}`).join('\n'));
@@ -262,7 +271,7 @@ async function main() {
     0,
     `CREATE SCHEMA IF NOT EXISTS ${namespace}`,
     TABLE_TYPE,
-    { UserCreated: 'dreamspace-ai-cli-v0.1' },
+    { UserCreated: 'sxt-tools-cli-v0.1' },
   );
 
   const createTablesTx = api.tx.tables.createTables([
@@ -271,7 +280,7 @@ async function main() {
       createStatement,
       tableType: TABLE_TYPE,
       commitment: { Empty: { hyperKzg: true } },
-      source: { UserCreated: 'dreamspace-ai-cli-v0.1' },
+      source: { UserCreated: 'sxt-tools-cli-v0.1' },
     },
   ]);
 
@@ -279,7 +288,19 @@ async function main() {
 
   console.log('');
   console.log('▶ Submitting batched CREATE NAMESPACE + CREATE TABLE transaction...');
-  await submitTx('createTable batch', batchTx, signer, signer.address, api);
+  try {
+    await submitTx('createTable batch', batchTx, signer, signer.address, api);
+  } catch (err) {
+    // Idempotent: if the namespace/table already exists from a prior run,
+    // skip ahead to the insert step rather than aborting.
+    const msg = String(err?.message ?? err);
+    if (/VersionAlreadyExists|TableAlreadyExists|NamespaceAlreadyExists|already exists/i.test(msg)) {
+      console.log(`  ⚠ Skipping create: ${msg.split('\n')[0]}`);
+      console.log(`  Proceeding to insert against existing ${namespace}.${table}.`);
+    } else {
+      throw err;
+    }
+  }
 
   // ─── Insert data ──────────────────────────────────────────────────────
   // Note: data insertion requires IndexingPallet.SubmitDataForPrivilegedQuorum.
@@ -288,43 +309,68 @@ async function main() {
   // data via the chain.spaceandtime.io CSV upload UI instead.
   console.log('');
   console.log(`▶ Encoding ${rows.length} rows as Apache Arrow IPC...`);
-  const arrowTable = tableFromJSON(rows);
+  // Build vectors with explicit Arrow types per the SQL schema. The chain's
+  // indexing pallet is strict about typing — `tableFromJSON` infers types from
+  // values which can produce dictionary-encoded or otherwise unexpected
+  // representations that the runtime rejects with `ArrowExpectedRecordBatchMessage`.
+  const vectors = {};
+  for (const [col, sqlType] of Object.entries(columnTypes)) {
+    const colValues = rows.map((r) => r[col]);
+    const upper = String(sqlType).toUpperCase();
+    let arrowType;
+    if (upper.startsWith('VARCHAR')) arrowType = new Utf8();
+    else if (upper === 'BINARY') arrowType = new Binary();
+    else if (upper === 'BOOLEAN') arrowType = new Bool();
+    else if (upper === 'TINYINT') arrowType = new Int8();
+    else if (upper === 'SMALLINT') arrowType = new Int16();
+    else if (upper === 'INT' || upper === 'INTEGER') arrowType = new Int32();
+    else if (upper === 'BIGINT') arrowType = new Int64();
+    else if (upper === 'TIMESTAMP') arrowType = new TimestampMillisecond();
+    else {
+      console.error(`✗ No Arrow type mapping for SQL type "${sqlType}" on column ${col}.`);
+      console.error('  Supported in this CLI: VARCHAR, BINARY, BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, TIMESTAMP.');
+      console.error('  DECIMAL75 needs a custom encoder — use the chain.spaceandtime.io UI for now.');
+      await api.disconnect();
+      process.exit(1);
+    }
+    vectors[col] = vectorFromArray(colValues, arrowType);
+  }
+  const arrowTable = new ArrowTable(vectors);
   const ipc = tableToIPC(arrowTable);
   console.log(`  Encoded ${ipc.byteLength} bytes`);
 
-  const candidateMethods = ['insertIntoTable', 'insertData', 'insert', 'insertRows', 'append'];
-  let insertMethod = null;
-  for (const m of candidateMethods) {
-    if (typeof api.tx.tables[m] === 'function') {
-      insertMethod = m;
-      break;
-    }
-  }
-
-  if (!insertMethod) {
+  // Insert is on the `indexing` pallet, not `tables`. Per the official
+  // chain.spaceandtime.io "Programmatic Data Insertion" docs:
+  //   api.tx.indexing.submitData({ namespace, name }, batchId, dataIpcHex)
+  if (typeof api.tx.indexing?.submitData !== 'function') {
     console.error('');
-    console.error('⚠ No matching insert method found on api.tx.tables.');
-    console.error(`  Tried: ${candidateMethods.join(', ')}`);
-    console.error('  Available methods:');
-    for (const m of Object.keys(api.tx.tables)) {
-      console.error(`    api.tx.tables.${m}`);
+    console.error('⚠ api.tx.indexing.submitData not available on this chain.');
+    console.error('  Available methods on api.tx.indexing:');
+    if (api.tx.indexing) {
+      for (const m of Object.keys(api.tx.indexing)) console.error(`    api.tx.indexing.${m}`);
+    } else {
+      console.error('    (indexing pallet not present)');
     }
     console.error('');
-    console.error('  TABLE WAS CREATED SUCCESSFULLY — only the insert step is missing.');
-    console.error('  Load data via the chain.spaceandtime.io CSV upload UI:');
+    console.error('  TABLE WAS CREATED SUCCESSFULLY — load data via the chain.spaceandtime.io UI:');
     console.error(`    Schema: ${namespace}`);
     console.error(`    Table:  ${table}`);
     await api.disconnect();
     process.exit(0);
   }
 
+  // Per docs: batchId must be unique per insert to the same table.
+  // Date.now() is fine for sequential inserts; switch to a UUID for concurrency.
+  const batchId = '0x' + BigInt(Date.now()).toString(16).padStart(16, '0');
+
   console.log('');
-  console.log(`▶ Submitting INSERT transaction via api.tx.tables.${insertMethod}...`);
-  console.log('  (requires IndexingPallet.SubmitDataForPrivilegedQuorum permission)');
+  console.log(`▶ Submitting INSERT transaction via api.tx.indexing.submitData...`);
+  console.log(`  Batch ID: ${batchId}`);
   try {
-    const insertTx = api.tx.tables[insertMethod](
+    const insertTx = api.tx.indexing.submitData(
       { namespace, name: table },
-      Array.from(ipc),
+      batchId,
+      '0x' + Buffer.from(ipc).toString('hex'),
     );
     await submitTx('insert', insertTx, signer, signer.address, api);
   } catch (err) {

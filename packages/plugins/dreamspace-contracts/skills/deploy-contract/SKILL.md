@@ -82,7 +82,7 @@ forge create ./examples/contracts/SampleToken.sol:SampleToken \
 Capture the output. The relevant lines are:
 
 - `Deployer:` — the address that signed the deploy
-- `Deployed to:` — the contract address (this is the headline result)
+- `Deployed to:` — the contract address
 - `Transaction hash:` — the deployment tx for the user to verify
 
 ### Step 4 — Verify on the block explorer (optional but recommended)
