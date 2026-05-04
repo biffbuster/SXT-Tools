@@ -175,8 +175,8 @@ IQueryRouter(QUERY_ROUTER).requestQuery(q, callback, payment);
       <h2 id="see-also">See also</h2>
       <ul>
         <li>Repo&apos;s end-to-end demo: <Link href="/docs/quick-start">Quick start</Link>.</li>
-        <li>Skill catalog with refusal rules and trigger phrases: <Link href="/docs/spaceandtime-ai/skills">Skills catalog</Link>.</li>
-        <li>Architecture diagram + the loop the skills compose into: <Link href="/docs/spaceandtime-ai/overview">What this repo ships</Link>.</li>
+        <li>Skill catalog with refusal rules and trigger phrases: <a href="https://github.com/biffbuster/sxt-tools/tree/main/packages/plugins" target="_blank" rel="noopener noreferrer">packages/plugins/</a>.</li>
+        <li>Architecture diagram + the loop the skills compose into: <a href="https://github.com/biffbuster/sxt-tools/blob/main/HOW_IT_WORKS.md" target="_blank" rel="noopener noreferrer">HOW_IT_WORKS.md</a>.</li>
         <li>Authoritative SXT reference contracts: <a href="https://github.com/spaceandtimefdn/sxt-chain-examples" target="_blank" rel="noopener noreferrer">spaceandtimefdn/sxt-chain-examples</a>.</li>
       </ul>
     </>

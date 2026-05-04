@@ -39,7 +39,7 @@ export default function GenerateAuditDeploy() {
         <li>Compiles with <code>forge build</code> against the pinned <code>sxt-proof-of-sql</code> and OpenZeppelin v5.2.0 dependencies.</li>
       </ol>
       <p>
-        The agent never reconstructs proof-plan ABI or the QueryRouter handshake from scratch — those rules live in the SKILL.md files (<Link href="/docs/spaceandtime-ai/skills">skills catalog</Link>) and the rendering script.
+        The agent never reconstructs proof-plan ABI or the QueryRouter handshake from scratch — those rules live in the SKILL.md files (<a href="https://github.com/biffbuster/sxt-tools/tree/main/packages/plugins" target="_blank" rel="noopener noreferrer">skills catalog</a>) and the rendering script.
       </p>
 
       <h3 id="generation-output">What you get</h3>
@@ -118,8 +118,8 @@ forge build                AUDIT_REPORT.md          on Base mainnet`}</code></pr
       <h2 id="next">Next</h2>
       <ul>
         <li>Run the full demo end-to-end: <Link href="/docs/quick-start">Quick start</Link>.</li>
-        <li>Skill internals: <Link href="/docs/spaceandtime-ai/skills">Skills catalog</Link>.</li>
-        <li>The publish step that produces the table this contract reads from: <Link href="/docs/spaceandtime-ai/overview">What this repo ships</Link>.</li>
+        <li>Skill internals: <a href="https://github.com/biffbuster/sxt-tools/tree/main/packages/plugins" target="_blank" rel="noopener noreferrer">packages/plugins/</a> (the five <code>SKILL.md</code> files).</li>
+        <li>The publish step that produces the table this contract reads from: <a href="https://github.com/biffbuster/sxt-tools/blob/main/HOW_IT_WORKS.md" target="_blank" rel="noopener noreferrer">HOW_IT_WORKS.md</a>.</li>
         <li>Canonical SXT addresses on Base and Ethereum: <Link href="/docs/space-and-time">Space and Time primitives</Link>.</li>
       </ul>
     </>
