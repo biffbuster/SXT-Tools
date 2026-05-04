@@ -1,11 +1,11 @@
 {
   "name": "dreamspace-data",
   "version": "0.1.0",
-  "description": "Publish datasets to chain-secured Space and Time tables, mint capability-scoped biscuit tokens, and prepare reference data that downstream skills consume.",
+  "description": "Publish CSV datasets to chain-secured Space and Time tables (Substrate extrinsics, Apache Arrow IPC, EthEcdsa-signed) so downstream skills can query them with Proof of SQL.",
   "author": {
-    "name": "DreamSpace AI proposal"
+    "name": "SXT Tools"
   },
   "homepage": "https://docs.spaceandtime.io/docs/creating-tables-ddl",
   "license": "MIT",
-  "keywords": ["space-and-time", "dreamspace", "dataset", "publish", "biscuit", "substrate", "tables"]
+  "keywords": ["space-and-time", "sxt", "dataset", "publish", "substrate", "tables", "proof-of-sql"]
 }

@@ -33,9 +33,18 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+!examples/scripts/.env.example
 
 # claude code per-user settings
 .claude/settings.local.json
+
+# foundry build artifacts (per-project)
+examples/contracts/sxt-onchain-query/dependencies/
+examples/contracts/sxt-onchain-query/cache/
+examples/contracts/sxt-onchain-query/out/
+examples/contracts/sxt-onchain-query/.deploy-state.json
+examples/contracts/sxt-onchain-query/.last-rendered.json
 
 # vercel
 .vercel

@@ -1,10 +1,10 @@
 {
-  "name": "dreamspace-ai",
+  "name": "sxt-tools",
   "owner": {
-    "name": "DreamSpace AI proposal"
+    "name": "SXT Tools"
   },
   "metadata": {
-    "description": "Proposed AI skills catalog for the DreamSpace SDK and Space and Time. This is a pitch artifact — see /docs/spaceandtime-ai/overview for the full proposal.",
+    "description": "AI skills catalog for the Space and Time stack — publish chain-secured datasets, deploy contracts, and run Proof of SQL queries that any smart contract on Base or Ethereum can verify onchain.",
     "version": "0.1.0"
   },
   "plugins": [
@@ -14,12 +14,12 @@
       "description": "Verifiable SQL on Space and Time — keeps agents inside the Proof of SQL surface.",
       "version": "0.1.0",
       "author": {
-        "name": "DreamSpace AI proposal"
+        "name": "SXT Tools"
       },
       "homepage": "https://docs.spaceandtime.io/docs/what-is-space-and-time-quick-intro",
       "license": "MIT",
       "category": "blockchain",
-      "keywords": ["space-and-time", "proof-of-sql", "zk", "sql", "blockchain", "dreamspace"]
+      "keywords": ["space-and-time", "proof-of-sql", "zk", "sql", "blockchain", "sxt"]
     },
     {
       "name": "dreamspace-contracts",
@@ -27,25 +27,25 @@
       "description": "Deploy contracts via foundry and run pre-deploy audits combining slither with SXT-indexed onchain due diligence.",
       "version": "0.1.0",
       "author": {
-        "name": "DreamSpace AI proposal"
+        "name": "SXT Tools"
       },
       "homepage": "https://docs.spaceandtime.io/docs/what-is-space-and-time-quick-intro",
       "license": "MIT",
       "category": "blockchain",
-      "keywords": ["space-and-time", "smart-contracts", "audit", "slither", "proof-of-sql", "dreamspace", "ethereum", "evm"]
+      "keywords": ["space-and-time", "smart-contracts", "audit", "slither", "proof-of-sql", "sxt", "ethereum", "evm", "base"]
     },
     {
       "name": "dreamspace-data",
       "source": "./packages/plugins/dreamspace-data",
-      "description": "Publish chain-secured datasets to Space and Time for downstream skills to query with proof.",
+      "description": "Publish chain-secured CSV datasets to Space and Time for downstream skills to query with Proof of SQL.",
       "version": "0.1.0",
       "author": {
-        "name": "DreamSpace AI proposal"
+        "name": "SXT Tools"
       },
       "homepage": "https://docs.spaceandtime.io/docs/creating-tables-ddl",
       "license": "MIT",
       "category": "blockchain",
-      "keywords": ["space-and-time", "dreamspace", "dataset", "publish", "biscuit", "substrate", "tables"]
+      "keywords": ["space-and-time", "sxt", "dataset", "publish", "substrate", "tables", "proof-of-sql"]
     }
   ]
 }

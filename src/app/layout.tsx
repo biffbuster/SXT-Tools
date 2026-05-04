@@ -2,20 +2,19 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "DreamSpace SDK — One Powerful SDK for Onchain Development",
-  description: "Build production-grade Web3 apps with TypeScript. Query blockchain data, deploy smart contracts, and ship to DreamSpace — all from your terminal.",
-  keywords: ["DreamSpace", "SDK", "Web3", "TypeScript", "blockchain", "smart contracts", "Space and Time", "Base", "Coinbase"],
-  authors: [{ name: "MakeInfinite Labs" }],
+  title: "SXT Tools — AI agent skills for Space and Time",
+  description: "Five protocol-aware skills compose a publish-and-prove pipeline that takes a CSV from a local file to a Base-mainnet event a smart contract can verify cryptographically.",
+  keywords: ["SXT Tools", "Space and Time", "Proof of SQL", "Claude Code", "AI agents", "skills", "blockchain", "smart contracts", "Base", "Ethereum"],
+  authors: [{ name: "SXT Tools" }],
   openGraph: {
-    title: "DreamSpace SDK",
-    description: "One Powerful SDK for Onchain Development",
+    title: "SXT Tools",
+    description: "AI agent skills for Space and Time — publish chain-secured datasets, deploy contracts, run Proof of SQL queries that any smart contract can verify onchain.",
     type: "website",
-    url: "https://dream.space",
   },
   twitter: {
     card: "summary_large_image",
-    title: "DreamSpace SDK",
-    description: "Build production-grade Web3 apps with TypeScript",
+    title: "SXT Tools",
+    description: "AI agent skills for Space and Time — publish, prove, verify onchain.",
   },
 };
 
