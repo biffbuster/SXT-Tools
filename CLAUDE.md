@@ -16,6 +16,8 @@ A user's CSV is published to SXT chain via two Substrate extrinsics (`tables.cre
 
 ### Publishing
 - **NEVER emit `PRIMARY KEY` in CREATE TABLE.** SXT chain accepts the DDL and rows ingest, but the dreamspace MAINNET indexer silently skips promotion → off-chain `/v1/zkquery` returns `422 "does not exist in source network MAINNET"` → on-chain executor silently drops `query()` calls → 100 SXT locks until 1-hour timeout. Verified failure mode that cost us 200 SXT before discovering it. `publish-dataset-cli.mjs:117` is the load-bearing line — keep it `NOT NULL`-only.
+- **`publish-dataset-cli.mjs` auto-writes the inferred schema** to `<csv-base>.inferred-schema.json` alongside the CSV after a successful publish. Downstream scripts (`save-proof-plans.mjs` via `SXT_SCHEMA_PATH`, `render-onchain-query.mjs` via `--schema`) read this artifact. Hand-curated `*.schema.json` files still take precedence when present. **Don't remove the schema writeout** — it's the bridge that makes the pipeline schema-agnostic for arbitrary CSVs.
+- **`save-proof-plans.mjs` is column-aware.** It reads the schema, picks the first VARCHAR column as the lookup target by default (or `SXT_LOOKUP_COLUMN` if set), and formats the SQL literal correctly per column type (`'string'` for VARCHAR, raw numeric for BIGINT, etc.). When generalizing to a new dataset shape, you generally need to set only `SXT_TABLE`, `SXT_POINT_LOOKUP`, and (if multi-VARCHAR) `SXT_LOOKUP_COLUMN`.
 - **Default `SXT_RPC` is `wss://rpc.mainnet.sxt.network`** (mirrors canonical [`spaceandtimefdn/sxt-chain-examples`](https://github.com/spaceandtimefdn/sxt-chain-examples/tree/main/tutorials/create_hello_world_table)). Testnet is opt-in via env override.
 - **Namespace must end with the publishing wallet's uppercase hex address.** `publish-dataset-cli.mjs` auto-suffixes — don't bypass.
 - **Apache Arrow vectors must carry explicit types** (`vectorFromArray(values, new Utf8())`). Inferred typing via `tableFromJSON` is rejected with `indexing.ArrowExpectedRecordBatchMessage`.
@@ -35,6 +37,13 @@ A user's CSV is published to SXT chain via two Substrate extrinsics (`tables.cre
 - **`query()` payment is 100 SXT** + ~$0.50 ETH gas. Refunds happen via `cancelQuery(bytes32 queryId, Payment payment)` (TWO args; the Payment struct must match the original `QueryRequested` event verbatim) — only after the 1-hour payment timeout expires.
 - **Callback selector** for `OnchainQuery.queryCallback` and `StakersQuery.queryCallback` is `0xd1eefc40`.
 
+### MCP server (`packages/mcp/sxt-mcp/`)
+- **The MCP server is community-built and must keep the SXT engineering team's monitoring quiet.** It mirrors the existing `examples/scripts/*.mjs` line-for-line; never invents new protocol logic. The package's `SAFETY.md` is the contract — the phased rollout (v0.0.1 → v0.1.0) and the mainnet double-gate (`mainnet: true` arg + `SXT_MCP_ALLOW_MAINNET=I-UNDERSTAND` env) are **load-bearing rules**, not suggestions. PRs that skip phases or weaken the gate get bounced.
+- **Current phase: v0.1.0.** All four tools live, mainnet enabled behind the double-gate. (1) `sxt.run_proven_query` — off-chain `/v1/zkquery` via the `sxt-proof-of-sql-sdk` SDK; SQL validated against the proven surface inline before submission. (2) `sxt.audit_contract` — pure local execution: `forge build` + optional `slither`, computes SHA-256 of every `.sol` source. (3) `sxt.publish_dataset` — testnet-default Substrate publish via `@polkadot/api` + Apache Arrow IPC + the `EthEcdsaSigner` from `src/lib/eth-ecdsa-signer.ts` (TypeScript port of `examples/scripts/ethecdsa_signer.mjs`); enforces NOT NULL on all columns, no PRIMARY KEY, auto-suffixes namespace with the wallet's hex address; idempotent (catches `*AlreadyExists` errors and proceeds to insert). (4) `sxt.deploy_contract` — testnet-default (Sepolia) deploy via ethers `ContractFactory` from a forge artifact; idempotent via `.deploy-state.json`; refuses `forceRedeploy` on mainnet. Phase 4 + 5 tools route through `selectNetwork()` for the mainnet gate.
+- **Default networks invert from the CLI scripts.** Existing scripts default to mainnet because they're operated by humans who know what they're doing. The MCP server defaults to testnet because it's invoked by agents with no informed consent. The `lib/network.ts` `selectNetwork()` function is the single chokepoint — every chain-touching tool must call it.
+- **Env var names match the existing scripts** (`PRIVATE_KEY`, `SXT_RPC`, `SXT_API_KEY` / `MAKEINFINITE_API_KEY`, `ETH_RPC`) so users don't relearn anything when moving between CLI and MCP.
+- **The server depends only on `@modelcontextprotocol/sdk` + `zod` + `zod-to-json-schema`** in v0.0.1. Heavy SXT deps (`@polkadot/api`, `apache-arrow`, `ethers`, `sxt-proof-of-sql-sdk`) are added phase-by-phase as their handlers come online — keeps the install fast and prevents accidental import surface.
+
 ### Code structure
 - **`StakersQuery.sol` is canonical and hand-curated.** `render-onchain-query.mjs` REFUSES `--name StakersQuery` and writes to `OnchainQuery.sol` instead. Never have the renderer overwrite it. To update its baked-in plan after a republish, edit `StakersQuery.sol` manually (regenerate plan via `commitments_v1_evmProofPlan` for the matching SQL, swap the `QUERY_PLAN` hex constant + the chain-state-hash doc comment).
 - **`OnchainQuery.sol` is auto-generated** from `examples/contracts/sxt-onchain-query/templates/OnchainQuery.sol.template`. Never edit `src/OnchainQuery/OnchainQuery.sol` directly — re-run the renderer.
@@ -45,7 +54,9 @@ A user's CSV is published to SXT chain via two Substrate extrinsics (`tables.cre
 - The repo brand is **`sxt-tools`** (the marketplace handle). Plugins are `dreamspace-data` / `dreamspace-query` / `dreamspace-contracts` (legacy slug). Don't introduce "Space and Time AI" or "spaceandtime-*" plugin names — those refer to a different/aspirational product.
 - **The five real skills are:** `dataset-publish`, `proof-of-sql-foundations`, `run-proven-query`, `deploy-contract`, `pre-deploy-audit`. Phantom skills referenced in old drafts (`verified-analytics`, `cross-chain-join`, `deploy-erc`, `post-deploy-monitor`, `biscuit-mint`, `queryrouter-call`) **do not exist** — don't reference them in new content.
 - **Don't reference biscuit tokens.** The `dataset-publish` skill does not mint them; the publish flow is just `tables.createTables` + `indexing.submitData`.
-- **Don't add new pages under `src/app/docs/`.** The trimmed structure is intentional. The four pages there (`/docs`, `/docs/quick-start`, `/docs/space-and-time`, `/docs/generate-audit-deploy`) are the canonical docs site.
+- **Don't add new pages under `src/app/docs/`.** The trimmed structure is intentional. The five pages there (`/docs`, `/docs/quick-start`, `/docs/space-and-time`, `/docs/generate-audit-deploy`, `/docs/mcp`) are the canonical docs site.
+- **`/docs/mcp` is the MCP integration spec** — config blocks for Claude Desktop / Cursor, the five `sxt.*` MCP tool definitions that map 1:1 to the shipped skills, env-var auth (`SXT_PRIVATE_KEY` + `MAKEINFINITE_API_KEY`), stdio + HTTP transport options, and a troubleshooting table. The page is honest about pre-release state via a callout banner — the actual MCP server (`packages/mcp/sxt-mcp/`) is not yet implemented; the page is the build target. When the server lands, update the status banner and the install snippet (`claude mcp install @biffbuster/sxt`) — keep tool names / arg shapes in sync with the implementation.
+- **`/docs` is the skills catalog**, not a generic overview. It is a server component that reads all five `SKILL.md` files at build time via `fs.readFileSync`, parses YAML frontmatter inline (no `gray-matter` dep), and renders a hero + facet rail + filtered card grid + architecture flow. To keep the catalog as the canonical surface for the skill list: when adding/renaming/removing a skill, update `SKILL_SPECS` in `src/app/docs/page.tsx` (lifecycle tag + 3 highlight bullets) — name and description come straight from the SKILL.md frontmatter. The filter chips live in the small client component `src/app/docs/SkillsCatalog.tsx`. The catalog widens itself past `.docs-content`'s 820px cap via the `:has(.skills-page)` selector in `globals.css`; don't paste catalog-specific widths into `.docs-content` directly.
 
 ---
 
@@ -60,6 +71,10 @@ A user's CSV is published to SXT chain via two Substrate extrinsics (`tables.cre
 | Add a new skill | New SKILL.md under `packages/plugins/<plugin>/skills/<skill>/`. Update `.claude-plugin/marketplace.json` + the plugin's `plugin.json`. Update root README's skill table |
 | Verify off-chain before spending 100 SXT | `verify-stakers.mjs` (uses SDK). Returns HyperKZG proof in ~1s if table is in MAINNET |
 | Modify the Solidity templates | Edit `examples/contracts/sxt-onchain-query/templates/*.template`, then re-run `render-onchain-query.mjs` |
+| Demo this repo to a teammate (read-only, ~5 min) | `git clone` → `npm install` (root `postinstall` builds MCP + installs scripts deps) → `cp examples/scripts/.env.example examples/scripts/.env` → set `SXT_API_KEY` → `npm run demo`. Queries the existing canonical STAKERS table; needs no wallet, no foundry, no ETH. |
+| Demo with the on-chain proof climax (~$5 SXT) | After read-only demo: `cd examples/scripts && node query-onchain.mjs`. Calls `query()` on the existing StakersQuery contract at `0x1fc02a8d…` on Base mainnet. Costs 100 SXT + gas; produces a verifiable `QueryFulfilled` event. |
+| **Full pipeline demo from scratch (~$10–15, all 5 skills)** | `npm run demo:fullpipeline` orchestrates 7 steps with confirmation prompts: publish a fresh CSV → save proof plan → render OnchainQuery → forge build → deploy to Base mainnet → off-chain prove → on-chain query. Use `DEMO_TABLE_REF="DEMO_PITCH.MEMBERS_$(date +%s)" npm run demo:fullpipeline` to ensure a fresh table per rehearsal (avoids row duplication). `npm run demo:fullpipeline:rehearse` runs steps 1–6 without the 100 SXT climax. Add `--auto` to skip prompts for screen recording. Add `--from=N` to resume from a specific step after a failure. |
+| **Run the pipeline against an arbitrary CSV** | Set `DEMO_CSV` to your file. The publish step auto-infers + writes the schema; the renderer reads it and types the contract correctly. If your CSV has multiple VARCHAR columns, set `SXT_LOOKUP_COLUMN=NAME` to choose which one the membership proof targets. Set `SXT_POINT_LOOKUP` to a value that exists in that column. Example: `DEMO_CSV=/path/to/my.csv SXT_LOOKUP_COLUMN=EMAIL SXT_POINT_LOOKUP=foo@bar.com npm run demo:fullpipeline -- --fresh`. Supported column types: BOOLEAN, TINYINT, SMALLINT, INT, INTEGER, BIGINT, VARCHAR, TIMESTAMP, BINARY (DECIMAL needs a custom encoder). |
 
 ---
 
@@ -82,7 +97,23 @@ done
 
 # Wallet/network state (when changes affect the pipeline)
 cd examples/scripts && node bootstrap.mjs --status
+
+# Pitch/demo readiness — fast aggregate check (no chain, no spend)
+node examples/scripts/preflight.mjs
+
+# Demo arc rehearsal — measures wall-clock per step against budgets
+node examples/scripts/demo-rehearsal.mjs
+PUBLISH_TESTNET=1 node examples/scripts/demo-rehearsal.mjs    # add testnet publish
+
+# Prove MCP wrapping is correct (1× API quota tick on each path)
+node examples/scripts/mcp-parity-test.mjs
 ```
+
+The three demo-readiness scripts are intentionally additive to `bootstrap.mjs`:
+`preflight.mjs` covers manifests + MCP boot + npm-pack readiness that bootstrap
+doesn't, `demo-rehearsal.mjs` orchestrates the live arc with timing budgets,
+and `mcp-parity-test.mjs` proves the MCP server is a faithful adapter (its
+`sxt.run_proven_query` output matches direct SDK output).
 
 ---
 

@@ -6,7 +6,15 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "postinstall": "npm --prefix examples/scripts install --silent && npm --prefix packages/mcp/sxt-mcp install --silent && npm --prefix packages/mcp/sxt-mcp run build --silent",
+    "preflight": "node examples/scripts/preflight.mjs --read-only",
+    "preflight:full": "node examples/scripts/preflight.mjs",
+    "demo": "node examples/scripts/preflight.mjs --read-only && node examples/scripts/demo-rehearsal.mjs",
+    "demo:full": "node examples/scripts/preflight.mjs && node examples/scripts/demo-rehearsal.mjs",
+    "demo:parity": "node examples/scripts/mcp-parity-test.mjs",
+    "demo:fullpipeline": "node examples/scripts/preflight.mjs && node examples/scripts/demo-fullpipeline.mjs",
+    "demo:fullpipeline:rehearse": "node examples/scripts/demo-fullpipeline.mjs --skip-onchain"
   },
   "dependencies": {
     "next": "16.2.4",

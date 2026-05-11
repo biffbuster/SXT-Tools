@@ -1,0 +1,58 @@
+{
+  "name": "@biffbuster/sxt-mcp",
+  "version": "0.1.0",
+  "description": "MCP server exposing the Space and Time publish-and-prove pipeline as typed MCP tools — publish a CSV to a chain-secured table, run Proof of SQL, audit Solidity, deploy contracts. Mainnet double-gated; testnet defaults.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/biffbuster/sxt-tools.git",
+    "directory": "packages/mcp/sxt-mcp"
+  },
+  "bin": {
+    "sxt-mcp": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "SAFETY.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "@polkadot/api": "^11.0.0",
+    "@polkadot/util": "^12.0.0",
+    "@polkadot/util-crypto": "^12.0.0",
+    "apache-arrow": "^17.0.0",
+    "csv-parse": "^5.5.0",
+    "ethers": "^6.13.0",
+    "sxt-proof-of-sql-sdk": "^0.54.0",
+    "zod": "^3.23.8",
+    "zod-to-json-schema": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "space-and-time",
+    "sxt",
+    "proof-of-sql",
+    "claude"
+  ]
+}

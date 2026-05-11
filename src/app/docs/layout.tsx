@@ -2,28 +2,21 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import ThemeToggle from "./ThemeToggle";
 
-const sidebarNav = [
-  {
-    category: "Getting Started",
-    items: [
-      { title: "Overview", href: "/docs" },
-      { title: "Quick start", href: "/docs/quick-start" },
-    ],
-  },
-  {
-    category: "Workflows",
-    items: [
-      { title: "Generate, audit & deploy", href: "/docs/generate-audit-deploy" },
-    ],
-  },
-  {
-    category: "Reference",
-    items: [
-      { title: "Space and Time primitives", href: "/docs/space-and-time" },
-    ],
-  },
+const SKILLS_COUNT = 5;
+
+const NAV_TABS: Array<{
+  title: string;
+  href: string;
+  count?: number;
+  matchExact?: boolean;
+}> = [
+  { title: "Skills", href: "/docs", count: SKILLS_COUNT, matchExact: true },
+  { title: "Quick start", href: "/docs/quick-start" },
+  { title: "Workflows", href: "/docs/generate-audit-deploy" },
+  { title: "Reference", href: "/docs/space-and-time" },
+  { title: "MCP", href: "/docs/mcp" },
 ];
 
 export default function DocsLayout({
@@ -32,79 +25,70 @@ export default function DocsLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const isActive = (href: string, exact?: boolean) =>
+    exact ? pathname === href : pathname === href || pathname.startsWith(href + "/");
 
   return (
     <>
-      {/* Top Nav */}
-      <nav className="docs-nav">
-        <div className="flex items-center justify-between w-full max-w-[1600px] mx-auto">
-          <div className="flex items-center gap-8">
-            <Link href="/" className="flex items-center">
-              <img src="/dreamspace-logo.png" alt="SXT Tools" className="h-7" />
-            </Link>
-            <div className="hidden md:flex items-center gap-6 text-sm">
-              <Link
-                href="/"
-                className="text-[var(--muted-grey)] hover:text-[var(--off-white)] transition-colors"
-              >
-                Home
-              </Link>
-              <Link
-                href="/docs"
-                className="text-[var(--hot-pink)] font-semibold"
-              >
-                Docs
-              </Link>
-            </div>
-          </div>
-          <a
-            href="https://dream.space"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn-primary text-sm py-2 px-4"
-          >
-            <span>dream.space</span>
-          </a>
-        </div>
-      </nav>
+      {/* Single top pill nav — logo left, tabs centered, actions right */}
+      <div className="docs-pill-nav-wrap">
+        <nav className="docs-pill-nav" aria-label="Docs navigation">
+          <Link href="/" className="docs-pill-logo" aria-label="SXT Tools home">
+            <img src="/sxt-skills-logo.jpg" alt="" />
+          </Link>
 
-      <div className="docs-layout">
-        {/* Sidebar */}
-        <aside className={`docs-sidebar ${sidebarOpen ? "open" : ""}`}>
-          {sidebarNav.map((section) => (
-            <div key={section.category} className="docs-sidebar-category">
-              <div className="docs-sidebar-category-title">
-                {section.category}
-              </div>
-              {section.items.map((item) => (
+          <div className="docs-pill-tabs" role="tablist">
+            {NAV_TABS.map((tab) => {
+              const active = isActive(tab.href, tab.matchExact);
+              return (
                 <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`docs-sidebar-link ${pathname === item.href ? "active" : ""}`}
-                  onClick={() => setSidebarOpen(false)}
+                  key={tab.href}
+                  href={tab.href}
+                  role="tab"
+                  aria-selected={active}
+                  className={`docs-pill-tab ${active ? "active" : ""}`}
                 >
-                  {item.title}
+                  <span>{tab.title}</span>
+                  {tab.count !== undefined && (
+                    <span className="docs-pill-count">{tab.count}</span>
+                  )}
                 </Link>
-              ))}
-            </div>
-          ))}
-        </aside>
+              );
+            })}
+            <Link href="/" className="docs-pill-tab">
+              <span>Home</span>
+            </Link>
+          </div>
 
-        {/* Main Content */}
-        <main className="docs-main">
-          <div className="docs-content">{children}</div>
-        </main>
-
-        {/* Mobile Toggle */}
-        <button
-          className="docs-sidebar-toggle"
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          aria-label="Toggle sidebar"
-        >
-          {sidebarOpen ? "\u2715" : "\u2630"}
-        </button>
+          <div className="docs-pill-actions">
+            <a
+              href="https://github.com/biffbuster/sxt-tools"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="docs-pill-icon-btn"
+              aria-label="GitHub repository"
+              title="biffbuster/sxt-tools on GitHub"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56v-2c-3.2.7-3.87-1.37-3.87-1.37-.52-1.33-1.27-1.69-1.27-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.69 1.25 3.34.96.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.27-5.24-5.66 0-1.25.45-2.27 1.18-3.07-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.15 1.17.91-.25 1.89-.38 2.86-.38s1.95.13 2.86.38c2.18-1.48 3.14-1.17 3.14-1.17.62 1.58.23 2.75.11 3.04.74.8 1.18 1.82 1.18 3.07 0 4.4-2.69 5.36-5.26 5.65.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.79.55C20.21 21.39 23.5 17.08 23.5 12 23.5 5.65 18.35.5 12 .5z" />
+              </svg>
+            </a>
+            <ThemeToggle />
+            <a
+              href="https://dream.space"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="docs-pill-cta"
+            >
+              dream.space
+            </a>
+          </div>
+        </nav>
       </div>
+
+      <main className="docs-main">
+        <div className="docs-content">{children}</div>
+      </main>
     </>
   );
 }
