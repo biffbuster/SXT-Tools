@@ -8,6 +8,12 @@ This repo is self-contained. No external SDK install, no separate tooling — cl
 
 ---
 
+## Status — community demo, not Space-and-Time endorsed
+
+This project is built by [biffbuster](https://github.com/biffbuster) on top of public Space and Time infrastructure. It is **not endorsed, approved, or supported by Space and Time**. The MCP server in particular ships under a self-imposed phased rollout and mainnet double-gate as a deliberate good-faith signal — the surface stays reviewable and contained for SXT engineering to inspect at any time. Treat the on-chain `query()` artifacts as proof-of-concept until SXT explicitly sanctions the toolchain.
+
+---
+
 ## Pipeline overview
 
 Five skills, three networks, eight steps, one verifiable Base event.
@@ -83,11 +89,13 @@ node bootstrap.mjs --new-wallet
 # 4. Confirm everything's green
 node bootstrap.mjs --status
 
-# 5. Run the full pipeline in one command
-node bootstrap.mjs --run
+# 5. Run the full pipeline (publish → plan → render → audit → deploy → prove → query)
+npm run demo:fullpipeline -- --fresh --auto
 ```
 
-`--run` executes publish → save proof plans → render → compile → deploy → approve → query in sequence and stops on the first failure. The final output is the staker address read from the verified callback event, the four transaction hashes, and the deployed contract address.
+`--fresh` timestamps the namespace + clears `.deploy-state.json` so each run publishes a brand-new table and deploys a brand-new contract. `--auto` skips confirmation prompts (use for screen recording; drop it for an interactive walk-through). Add `--from=N` to resume after a step fails; `--skip-onchain` to run steps 1–6 without the 100-SXT climax. The final output is the membership address read from the verified callback event, the four transaction hashes, and the deployed contract address.
+
+Verified end-to-end on Base mainnet 2026-05-11 against a fresh single-VARCHAR allowlist CSV — contract [`0x8Fc04b5a628a3dbb8Da21FFc5CCc38a65c89AE05`](https://basescan.org/address/0x8Fc04b5a628a3dbb8Da21FFc5CCc38a65c89AE05), query callback in 15.9s.
 
 ---
 

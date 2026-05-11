@@ -11,25 +11,43 @@ export default function McpPage() {
         server is a thin protocol adapter.
       </p>
 
-      <div className="docs-callout docs-callout-warning">
-        <div className="docs-callout-title">Status: pre-release</div>
-        The MCP server (<code>@biffbuster/sxt-mcp</code>) is in active development —
-        target tag v0.1 in Q3 2026, listing on the Claude MCP marketplace shortly
-        after. The configuration and tool surface below is the spec we're building
-        against; expect minor field renames before v1.0. Track the work at{" "}
-        <a
-          href="https://github.com/biffbuster/sxt-tools"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          github.com/biffbuster/sxt-tools
-        </a>
-        .
+      <div className="docs-callout">
+        <div className="docs-callout-title">Status: v0.1.0 — shipped, npm publish pending</div>
+        <p>
+          All four <code>sxt.*</code> tools live in{" "}
+          <code>packages/mcp/sxt-mcp/</code>: testnet defaults, mainnet behind a
+          double-gate (<code>mainnet: true</code> arg <em>and</em>{" "}
+          <code>SXT_MCP_ALLOW_MAINNET=I-UNDERSTAND</code> env). The package is{" "}
+          <code>private:true</code> pending external security review before npm
+          publication; install today by building from source. Track at{" "}
+          <a
+            href="https://github.com/biffbuster/sxt-tools"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            github.com/biffbuster/sxt-tools
+          </a>
+          .
+        </p>
+        <p>
+          <strong>Built independently — not endorsed or supported by Space and Time.</strong>{" "}
+          The phased rollout + mainnet double-gate are self-imposed
+          good-faith constraints, not SXT-imposed gates. Engage SXT
+          engineering directly for production use cases until an official
+          approval lands.
+        </p>
       </div>
 
       <h2 id="tldr">TL;DR install</h2>
       <p>
-        Once v0.1 ships, install via the Claude MCP marketplace:
+        Build from source today:
+      </p>
+      <pre>
+        <code>{`git clone https://github.com/biffbuster/sxt-tools.git
+cd sxt-tools && npm install   # root postinstall builds the MCP server`}</code>
+      </pre>
+      <p>
+        Once the package goes public on npm, the marketplace one-liner will be:
       </p>
       <pre>
         <code>{`claude mcp install @biffbuster/sxt`}</code>
@@ -66,44 +84,46 @@ export default function McpPage() {
             <code>sxt.publish_dataset</code>
           </strong>{" "}
           — wraps the <code>dataset-publish</code> skill. Args:{" "}
-          <code>file</code> (CSV/Parquet/JSON path), <code>schema</code> (e.g.,{" "}
-          <code>MY_AUDIT.KNOWN_EXPLOITS</code>), <code>columns</code> (typed array),{" "}
-          <code>tableType</code> (Community / PublicPermissionless / etc). Returns the
-          finalized table reference + chain block hash.
+          <code>csvPath</code>, <code>tableRef</code> (e.g.{" "}
+          <code>MY_AUDIT.KNOWN_EXPLOITS</code>),{" "}
+          <code>mainnet?: boolean</code> (default <code>false</code> → testnet).
+          The server auto-suffixes the namespace with the signer's uppercase hex,
+          enforces NOT NULL on every column, refuses PRIMARY KEY, and is
+          idempotent — catches <code>*AlreadyExists</code> errors and proceeds to
+          insert. Returns the finalized table reference + finalized block hash.
         </li>
         <li>
           <strong>
             <code>sxt.run_proven_query</code>
           </strong>{" "}
           — wraps <code>run-proven-query</code>. Args: <code>tableRef</code>,{" "}
-          <code>sql</code> (must compile against the proven surface),{" "}
-          <code>commitmentScheme</code> (default <code>HYPER_KZG</code>). Returns rows
-          + Proof of SQL receipt.
+          <code>sql</code> (validated inline against the proven surface — no
+          window funcs, no DML, no DDL),{" "}
+          <code>commitmentScheme</code> (default <code>HYPER_KZG</code>). Returns
+          rows + locally-verified HyperKZG proof.
         </li>
         <li>
           <strong>
             <code>sxt.audit_contract</code>
           </strong>{" "}
-          — wraps <code>pre-deploy-audit</code>. Args: <code>sourcePath</code>,{" "}
-          <code>references</code> (array of SXT table refs to cross-check). Returns
-          structured <code>AUDIT_REPORT.md</code> contents.
+          — wraps <code>pre-deploy-audit</code>. Pure local execution: runs{" "}
+          <code>forge build</code> and (optionally) <code>slither</code>, computes
+          SHA-256 of every <code>.sol</code> source. No chain calls, no spend.
+          Args: <code>sourcePath</code>, <code>outputPath?</code>. Returns
+          structured <code>AUDIT_REPORT.md</code> contents with the
+          PASS/WARN/FAIL verdict.
         </li>
         <li>
           <strong>
             <code>sxt.deploy_contract</code>
           </strong>{" "}
-          — wraps <code>deploy-contract</code>. Args: <code>contract</code>,{" "}
-          <code>chain</code> (base / ethereum / sepolia), <code>constructorArgs</code>.
-          Refuses mainnet without explicit <code>confirm: true</code>. Returns
-          deployed address + tx hash.
-        </li>
-        <li>
-          <strong>
-            <code>sxt.proof_of_sql_foundations</code>
-          </strong>{" "}
-          — exposed as an MCP <em>resource</em> (not a tool). Returns the proven SQL
-          surface reference docs so agents can self-validate SQL before calling{" "}
-          <code>sxt.run_proven_query</code>.
+          — wraps <code>deploy-contract</code>. Args: <code>contractPath</code>,{" "}
+          <code>mainnet?: boolean</code> (default <code>false</code> → Sepolia),{" "}
+          <code>forceRedeploy?</code>. Mainnet requires both <code>mainnet: true</code>{" "}
+          <em>and</em> <code>SXT_MCP_ALLOW_MAINNET=I-UNDERSTAND</code> in the
+          server's env. Idempotent via <code>.deploy-state.json</code>;{" "}
+          <code>forceRedeploy</code> is refused on mainnet. Returns deployed
+          address + tx hash.
         </li>
       </ul>
 
