@@ -1,0 +1,7 @@
+{
+  "columns": {
+    "ADDRESS": "VARCHAR"
+  },
+  "primaryKey": "ADDRESS",
+  "note": "Hand-curated schema for audit_allowlist.csv. Mirrors sxt_stakers.schema.json shape. Used by save-proof-plans.mjs + render-onchain-query.mjs when the CSV was published via the chain.spaceandtime.io UI (so publish-dataset-cli.mjs's auto-generated *.inferred-schema.json isn't present)."
+}

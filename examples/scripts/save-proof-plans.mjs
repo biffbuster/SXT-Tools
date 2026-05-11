@@ -4,38 +4,144 @@
  * `commitments_v1_evmProofPlan` on the SXT chain RPC. Writes one JSON
  * artifact per query to examples/data/proof-plans/.
  *
- * SXT Toolkit quickstart — pointing this at your own data:
- *   1. Set SXT_TABLE in .env to your full table reference, e.g.:
- *        SXT_TABLE=MY_PROJECT_<UPPERCASE_HEX_ADDRESS>.MY_TABLE
- *   2. (Optional) Set SXT_POINT_LOOKUP to an address you expect IS in the table
- *      (used for the positive-membership proof). Default is the demo's known
- *      staker.
- *   3. (Optional) Edit the `plans` array below if your queries differ from the
- *      generic membership/count/non-membership template (e.g., your column is
- *      not named STAKER).
+ * SCHEMA-AWARE: discovers your table's columns from a schema JSON and
+ * picks a sensible lookup column automatically (the first VARCHAR), or
+ * uses SXT_LOOKUP_COLUMN if set. Generates type-correct SQL literals
+ * (quoted for VARCHAR, raw for BIGINT etc.) so the same script works
+ * for any CSV the publish step has indexed.
  *
- * Defaults preserve the canonical demo's behavior so re-running with no env
- * overrides reproduces the proof plans baked into the existing
+ * Pointing this at your own data:
+ *   1. Run `publish-dataset-cli.mjs <csv> <PREFIX.TABLE>` — that step
+ *      writes `<csv-base>.inferred-schema.json` next to your CSV.
+ *   2. Set SXT_TABLE in .env to the full table reference printed by
+ *      publish (PREFIX_<HEX>.TABLE).
+ *   3. Set SXT_SCHEMA_PATH if your schema lives somewhere unusual.
+ *      Default: `../data/sxt_stakers.schema.json` (matches the canonical
+ *      demo) — if you used --fresh, the orchestrator passes the right
+ *      path automatically.
+ *   4. (Optional) Set SXT_LOOKUP_COLUMN if your schema has multiple
+ *      VARCHAR columns and you want a specific one for the point-lookup
+ *      membership proof. Default: first VARCHAR column.
+ *   5. (Optional) Set SXT_POINT_LOOKUP to a value you expect IS in the
+ *      table.
+ *
+ * Defaults preserve the canonical demo's behavior so re-running with no
+ * env overrides reproduces the proof plans baked into the existing
  * StakersQuery.sol / OnchainQuery.sol contracts.
  */
 import 'dotenv/config';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const RPC = process.env.SXT_RPC_HTTP ?? 'https://rpc.mainnet.sxt.network';
 const TABLE = process.env.SXT_TABLE ?? 'MY_AUDIT_V2_5731EC0BBEB5F7BCAA2E4BAF3179A7A4C59C2552.STAKERS';
 const POINT_LOOKUP = process.env.SXT_POINT_LOOKUP ?? '0x45c56e138881fd3ff46359ba1826d5fc6fccaedc';
+const SCHEMA_PATH = process.env.SXT_SCHEMA_PATH ?? '../data/sxt_stakers.schema.json';
+const LOOKUP_COLUMN_ENV = process.env.SXT_LOOKUP_COLUMN?.trim();
 const OUT_DIR = '../data/proof-plans';
 
-// To customize for a non-STAKERS schema, edit the SQL below. Only the
-// canonical membership/count/non-membership shapes are wired through to the
-// renderer + Solidity templates; richer queries (GROUP BY, JOIN, SUM) work as
-// proof plans but require a matching contract.
+// ─── Schema discovery ─────────────────────────────────────────────────
+
+if (!existsSync(SCHEMA_PATH)) {
+  console.error(`✗ Schema file not found: ${SCHEMA_PATH}`);
+  console.error('');
+  console.error('  publish-dataset-cli.mjs writes <csv-base>.inferred-schema.json next');
+  console.error('  to the CSV after a successful publish. Either:');
+  console.error('    • Set SXT_SCHEMA_PATH to that file, or');
+  console.error('    • Hand-curate a schema JSON at the default path.');
+  process.exit(1);
+}
+
+const schema = JSON.parse(readFileSync(SCHEMA_PATH, 'utf8'));
+if (!schema.columns) {
+  console.error(`✗ Schema at ${SCHEMA_PATH} missing "columns" field.`);
+  process.exit(1);
+}
+
+// Normalize the schema map to UPPERCASE column name → base SQL type
+// (strip parametric type widths like DECIMAL(38,10) for matching).
+const COLUMNS = Object.fromEntries(
+  Object.entries(schema.columns).map(([k, v]) => [
+    k.toUpperCase(),
+    String(v).toUpperCase().split('(')[0],
+  ]),
+);
+
+function pickLookupColumn() {
+  if (LOOKUP_COLUMN_ENV) {
+    const upper = LOOKUP_COLUMN_ENV.toUpperCase();
+    if (!(upper in COLUMNS)) {
+      throw new Error(
+        `SXT_LOOKUP_COLUMN="${LOOKUP_COLUMN_ENV}" not in schema. Available: ${Object.keys(COLUMNS).join(', ')}`,
+      );
+    }
+    return { name: upper, type: COLUMNS[upper] };
+  }
+  // Default: first VARCHAR column (the common "identifier" pattern).
+  const varcharCols = Object.entries(COLUMNS).filter(([, t]) => t === 'VARCHAR');
+  if (varcharCols.length > 0) {
+    return { name: varcharCols[0][0], type: 'VARCHAR' };
+  }
+  // No VARCHAR — fall back to first column of any type.
+  const first = Object.entries(COLUMNS)[0];
+  if (!first) throw new Error('Schema has zero columns — cannot select a lookup column.');
+  return { name: first[0], type: first[1] };
+}
+
+const LOOKUP = pickLookupColumn();
+
+// Format the lookup value as a SQL literal correct for the column type.
+function formatLiteral(value, sqlType) {
+  switch (sqlType) {
+    case 'VARCHAR':
+    case 'BINARY':
+      return `'${String(value).replace(/'/g, "''")}'`;
+    case 'BOOLEAN':
+      return /^true$/i.test(String(value)) ? 'TRUE' : 'FALSE';
+    case 'TIMESTAMP':
+      return `TIMESTAMP '${String(value)}'`;
+    default:
+      // Numeric types (TINYINT/SMALLINT/INT/INTEGER/BIGINT/DECIMAL)
+      return String(value);
+  }
+}
+
+// The "negative" sentinel value for non-membership proofs needs to be a
+// value that's plausibly NOT in the table. Zero-address for VARCHAR (the
+// canonical demo), or 0 for numeric types.
+function negativeLiteral(sqlType) {
+  switch (sqlType) {
+    case 'VARCHAR':
+      return `'0x0000000000000000000000000000000000000000'`;
+    case 'BINARY':
+      return `'\\x00'`;
+    case 'BOOLEAN':
+      return 'FALSE';
+    default:
+      return '-1'; // unlikely to be a real ID in most numeric schemas
+  }
+}
+
+const lookupLiteral = formatLiteral(POINT_LOOKUP, LOOKUP.type);
+const notInLiteral = negativeLiteral(LOOKUP.type);
+
+console.log(`  Schema:          ${SCHEMA_PATH}`);
+console.log(`  Table:           ${TABLE}`);
+console.log(`  Lookup column:   ${LOOKUP.name} (${LOOKUP.type})${LOOKUP_COLUMN_ENV ? ' [from SXT_LOOKUP_COLUMN]' : ' [auto-picked first VARCHAR]'}`);
+console.log(`  Lookup value:    ${lookupLiteral}`);
+console.log('');
+
+// ─── Plans ────────────────────────────────────────────────────────────
+
+// To customize beyond the canonical membership/count/non-membership
+// shapes (e.g. GROUP BY, JOIN, SUM with WHERE), edit the SQL below.
+// The renderer + Solidity template handle arbitrary SELECT projections
+// with COUNT(*) + SUM(col) aggregates already.
 const plans = [
   {
     name: 'point-lookup',
-    description: 'Verify a specific known address is in the table (positive membership proof).',
-    sql: `SELECT STAKER FROM ${TABLE} WHERE STAKER = '${POINT_LOOKUP}'`,
+    description: `Verify a specific ${LOOKUP.type} value is in column ${LOOKUP.name} of the table (positive membership proof).`,
+    sql: `SELECT ${LOOKUP.name} FROM ${TABLE} WHERE ${LOOKUP.name} = ${lookupLiteral}`,
   },
   {
     name: 'count',
@@ -44,8 +150,8 @@ const plans = [
   },
   {
     name: 'negative-lookup',
-    description: 'Verify a specific address is NOT in the table (non-membership proof).',
-    sql: `SELECT STAKER FROM ${TABLE} WHERE STAKER = '0x0000000000000000000000000000000000000000'`,
+    description: `Verify a sentinel ${LOOKUP.type} value is NOT in column ${LOOKUP.name} of the table (non-membership proof).`,
+    sql: `SELECT ${LOOKUP.name} FROM ${TABLE} WHERE ${LOOKUP.name} = ${notInLiteral}`,
   },
 ];
 
@@ -70,6 +176,8 @@ for (const plan of plans) {
     description: plan.description,
     table: TABLE,
     sql: plan.sql,
+    lookupColumn: LOOKUP.name,
+    lookupType: LOOKUP.type,
     proofPlan: json.result.proofPlan,
     chainStateAt: json.result.at,
     rpcEndpoint: RPC,
@@ -78,5 +186,5 @@ for (const plan of plans) {
     note: 'Drop the proofPlan into a Solidity contract as `bytes public constant QUERY_PLAN = hex"<plan-without-0x>";` then submit via IQueryRouter.requestQuery() per the SXT onchain_hello_world_query tutorial.',
   };
   writeFileSync(join(OUT_DIR, `${plan.name}.json`), JSON.stringify(artifact, null, 2) + '\n');
-  console.log(`✓ ${plan.name}.json (${artifact.proofPlanBytes} bytes plan, at ${artifact.chainStateAt.substring(0, 14)}...)`);
+  console.log(`✓ ${plan.name}.json (${artifact.proofPlanBytes} bytes plan, at ${artifact.chainStateAt?.substring(0, 14) ?? '?'}...)`);
 }

@@ -7,15 +7,16 @@
  *
  * Env:
  *   PRIVATE_KEY    Ethereum private key.
- *   SXT_RPC        Default: wss://rpc.testnet.sxt.network
- *                  Override to mainnet via wss://rpc.mainnet.sxt.network.
+ *   SXT_RPC        Default: wss://rpc.mainnet.sxt.network (canonical, matches
+ *                  publish-dataset-cli.mjs). Override to testnet via
+ *                  wss://rpc.testnet.sxt.network.
  */
 import 'dotenv/config';
 import { ApiPromise, WsProvider } from '@polkadot/api';
 import { Wallet } from 'ethers';
 import { EthEcdsaSigner } from './ethecdsa_signer.mjs';
 
-const RPC = process.env.SXT_RPC ?? 'wss://rpc.testnet.sxt.network';
+const RPC = process.env.SXT_RPC ?? 'wss://rpc.mainnet.sxt.network';
 
 const api = await ApiPromise.create({ provider: new WsProvider(RPC), noInitWarn: true });
 const chain = (await api.rpc.system.chain()).toString();

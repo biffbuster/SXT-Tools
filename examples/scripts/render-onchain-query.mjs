@@ -111,11 +111,35 @@ if (contractName === 'StakersQuery') {
   process.exit(1);
 }
 
+// Solidity reserved keywords that can't be used as parameter names.
+// Community CSVs may have columns like ADDRESS, STRING, BOOL, FROM, TO, etc.
+// — those lowercase to reserved words and break `forge build`. Trailing-`_`
+// is the idiomatic OpenZeppelin convention for shadowed identifiers.
+const SOL_RESERVED = new Set([
+  'address','bool','string','bytes','int','uint','fixed','ufixed',
+  'mapping','struct','function','contract','event','modifier','enum',
+  'library','interface','pragma','import','using','assembly',
+  'return','returns','if','else','for','while','do','break','continue',
+  'throw','assert','require','revert','this','super','new','delete',
+  'var','let','try','catch','emit','payable','pure','view',
+  'external','internal','private','public','constant','immutable',
+  'memory','storage','calldata','indexed','anonymous','virtual','override',
+  'abstract','final','unchecked','as','is','from','to','after',
+  'true','false','null','wei','gwei','ether','seconds','minutes','hours','days','weeks',
+]);
+function safeParamName(raw) {
+  const lower = raw.toLowerCase();
+  if (SOL_RESERVED.has(lower)) return `${lower}_`;
+  if (/^(int|uint)\d+$/.test(lower)) return `${lower}_`;
+  if (/^bytes([1-9]|[12]\d|3[0-2])$/.test(lower)) return `${lower}_`;
+  return lower;
+}
+
 // Generate the rendered blocks.
 const decodeBlock = projection
   .map(c => `        ${c.arrayType} memory ${c.varName} = ProofOfSqlTable.${c.reader}(tableResult, ${projection.indexOf(c)});`)
   .join('\n');
-const eventParams = projection.map(c => `${c.solType} ${c.name.toLowerCase()}`).join(', ');
+const eventParams = projection.map(c => `${c.solType} ${safeParamName(c.name)}`).join(', ');
 const rowFields = projection.map(c => `${c.varName}[i]`).join(', ');
 const rowCountExpr = `${projection[0].varName}.length`;
 const callbackGasLimit = `${100_000 + projection.length * 20_000}`;

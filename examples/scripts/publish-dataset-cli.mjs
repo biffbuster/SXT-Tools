@@ -35,14 +35,19 @@
  *     Effective namespace: <PREFIX>_<UPPERCASE_HEX_ADDRESS>
  *   - All columns must be NOT NULL (chain rule for Proof of SQL).
  *     This script renders NOT NULL on every column automatically.
- *   - Data insertion requires the IndexingPallet.SubmitDataForPrivilegedQuorum
- *     permission. If your account lacks it, table creation succeeds but the
- *     insert step fails — use the chain.spaceandtime.io UI for the data load,
- *     or contact SxT to request the permission.
+ *   - Standard Community tables created from a funded account accept submitData
+ *     end-to-end with no out-of-band permission grant (verified on mainnet for
+ *     the STAKERS table at commit d4f07f4). Inserts only fail when:
+ *       (1) the signing wallet doesn't match the namespace suffix — the chain
+ *           enforces that the namespace ends in the signer's uppercase hex;
+ *       (2) the tableType is non-Community (OwnerPermissioned, UserVerified,
+ *           CoreBlockchain, …) — those route through a privileged quorum check;
+ *       (3) you're inserting into a namespace someone else created.
  */
 
 import 'dotenv/config';
 import { ApiPromise, WsProvider } from '@polkadot/api';
+import { hexToU8a } from '@polkadot/util';
 import {
   Table as ArrowTable,
   vectorFromArray,
@@ -52,7 +57,7 @@ import {
 } from 'apache-arrow';
 import { parse as parseCsv } from 'csv-parse/sync';
 import { Wallet } from 'ethers';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { EthEcdsaSigner } from './ethecdsa_signer.mjs';
 
 const RPC = process.env.SXT_RPC ?? 'wss://rpc.mainnet.sxt.network';
@@ -313,6 +318,56 @@ async function main() {
   // indexing pallet is strict about typing — `tableFromJSON` infers types from
   // values which can produce dictionary-encoded or otherwise unexpected
   // representations that the runtime rejects with `ArrowExpectedRecordBatchMessage`.
+  //
+  // csv-parse returns every value as a string. Apache Arrow's vectorFromArray
+  // expects the underlying JS type per Arrow type, matching the canonical SXT
+  // pattern from spaceandtimefdn/sxt-chain-examples → tutorials/
+  // create_hello_world_table/hello_world_insert_data.js:
+  //
+  //   Int64()                  → BigInt   (e.g. `42n`)
+  //   Utf8()                   → string   (e.g. `"Amazon rainforest"`)
+  //   Binary()                 → Uint8Array via hexToU8a (e.g. hexToU8a("0x0001"))
+  //   Bool()                   → boolean
+  //   Int8/16/32()             → Number
+  //   TimestampMillisecond()   → BigInt of epoch milliseconds (an Int64 under the hood)
+  //
+  // Coerce CSV strings → the right JS type here so e.g. ISO-8601 TIMESTAMP
+  // strings convert to epoch-ms BigInts rather than throwing "Cannot convert
+  // <iso> to a BigInt" downstream.
+  function coerceValues(values, sqlType) {
+    const upper = String(sqlType).toUpperCase();
+    if (upper.startsWith('VARCHAR')) return values; // strings pass through
+    if (upper === 'BINARY') {
+      return values.map((v) => {
+        const s = String(v).trim();
+        // Accept 0x-prefixed hex (canonical SXT pattern) or bare hex.
+        if (s.startsWith('0x')) return hexToU8a(s);
+        if (/^[0-9a-f]+$/i.test(s)) return hexToU8a('0x' + s);
+        // Fallback: treat as UTF-8 bytes.
+        return new TextEncoder().encode(s);
+      });
+    }
+    if (upper === 'BOOLEAN') return values.map((v) => /^true$/i.test(String(v).trim()));
+    if (upper === 'TINYINT' || upper === 'SMALLINT' || upper === 'INT' || upper === 'INTEGER') {
+      return values.map((v) => Number(String(v).trim()));
+    }
+    if (upper === 'BIGINT') return values.map((v) => BigInt(String(v).trim()));
+    if (upper === 'TIMESTAMP') {
+      return values.map((v) => {
+        const s = String(v).trim();
+        if (/^\d+$/.test(s)) return BigInt(s);
+        const ms = Date.parse(s);
+        if (Number.isNaN(ms)) {
+          throw new Error(
+            `Invalid TIMESTAMP value "${s}" — expected epoch milliseconds or ISO 8601 (e.g. 2026-01-15T10:30:00)`,
+          );
+        }
+        return BigInt(ms);
+      });
+    }
+    return values;
+  }
+
   const vectors = {};
   for (const [col, sqlType] of Object.entries(columnTypes)) {
     const colValues = rows.map((r) => r[col]);
@@ -333,7 +388,8 @@ async function main() {
       await api.disconnect();
       process.exit(1);
     }
-    vectors[col] = vectorFromArray(colValues, arrowType);
+    const coerced = coerceValues(colValues, sqlType);
+    vectors[col] = vectorFromArray(coerced, arrowType);
   }
   const arrowTable = new ArrowTable(vectors);
   const ipc = tableToIPC(arrowTable);
@@ -375,18 +431,74 @@ async function main() {
     await submitTx('insert', insertTx, signer, signer.address, api);
   } catch (err) {
     console.error('');
-    console.error(`⚠ Insert failed: ${err.message}`);
-    console.error('  TABLE WAS CREATED SUCCESSFULLY — load data via chain.spaceandtime.io UI:');
+    console.error(`✗ Insert failed: ${err.message}`);
+    console.error('  TABLE WAS CREATED SUCCESSFULLY — but data is not loaded.');
     console.error(`    Schema: ${namespace}`);
     console.error(`    Table:  ${table}`);
+    console.error('');
+    const walletSuffix = signer.address.slice(2).toUpperCase();
+    const namespaceSuffix = namespace.split('_').pop();
+    console.error('  Diagnose in order:');
+    console.error('');
+    console.error('    1. Wallet ↔ namespace suffix mismatch (most common cause).');
+    console.error(`       The chain enforces that the namespace ends in the signer's uppercase hex.`);
+    console.error(`         signer address suffix:   ${walletSuffix}`);
+    console.error(`         namespace ends with:     ${namespaceSuffix}`);
+    if (namespaceSuffix !== walletSuffix) {
+      console.error(`       ✗ These do NOT match — this is almost certainly the cause.`);
+      console.error('       Fix: republish under a fresh <PREFIX> so the CLI auto-suffixes with your');
+      console.error('       current wallet, or switch PRIVATE_KEY to the wallet that owns the suffix.');
+    } else {
+      console.error('       ✓ Match — rule out and proceed to (2).');
+    }
+    console.error('');
+    console.error(`    2. tableType is not Community.  Current: SXT_TABLE_TYPE="${TABLE_TYPE}"`);
+    console.error('       OwnerPermissioned / UserVerified / CoreBlockchain route through a privileged');
+    console.error('       quorum check.  Community tables (the default) accept submitData end-to-end.');
+    console.error('       Fix: unset SXT_TABLE_TYPE (default Community) and republish.');
+    console.error('');
+    console.error('    3. Bypassed auto-suffix.  If an orchestrator constructed the full namespace');
+    console.error('       itself and passed it through, publish-dataset-cli.mjs:244 auto-suffix logic');
+    console.error('       did not run.  Pass <PREFIX> alone — the CLI appends the suffix for you.');
+    console.error('');
+    console.error('    4. Last resort — privileged quorum / permission grant.  Only relevant if you');
+    console.error('       genuinely need a non-Community tableType.  Standard Community publishes do');
+    console.error('       NOT require an out-of-band grant from SxT (verified on mainnet, commit d4f07f4).');
+    console.error('       Alternative: load data manually via chain.spaceandtime.io UI.');
     await api.disconnect();
-    process.exit(0);
+    process.exit(1);
   }
+
+  // Write the inferred schema alongside the CSV so downstream tooling
+  // (save-proof-plans.mjs, render-onchain-query.mjs) can find it without
+  // requiring the user to hand-curate a *.schema.json file per dataset.
+  // Uses an .inferred-schema.json suffix so this artifact never clobbers
+  // hand-curated schemas (e.g. sxt_stakers.schema.json).
+  const schemaOutPath = args.csvPath.replace(/\.csv$/i, '') + '.inferred-schema.json';
+  // Write only the CSV basename — never the absolute path. Absolute paths
+  // would leak the publisher's local username/home directory into the
+  // artifact (e.g. /Users/<name>/...) if the file were ever shared.
+  const csvBasename = args.csvPath.split(/[\\/]/).pop();
+  writeFileSync(
+    schemaOutPath,
+    JSON.stringify(
+      {
+        columns: columnTypes,
+        table: `${namespace}.${table}`,
+        csv: csvBasename,
+        generatedAt: new Date().toISOString(),
+      },
+      null,
+      2,
+    ) + '\n',
+  );
 
   console.log('');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log(`  ✅ Published ${rows.length} rows to ${namespace}.${table}`);
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('');
+  console.log(`  Inferred schema:  ${schemaOutPath}`);
   console.log('');
   console.log('Verify with a proven SELECT:');
   console.log('');
