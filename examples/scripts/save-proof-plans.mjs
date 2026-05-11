@@ -32,13 +32,17 @@
 import 'dotenv/config';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { parse as parseCsv } from 'csv-parse/sync';
 
 const RPC = process.env.SXT_RPC_HTTP ?? 'https://rpc.mainnet.sxt.network';
 const TABLE = process.env.SXT_TABLE ?? 'MY_AUDIT_V2_5731EC0BBEB5F7BCAA2E4BAF3179A7A4C59C2552.STAKERS';
-const POINT_LOOKUP = process.env.SXT_POINT_LOOKUP ?? '0x45c56e138881fd3ff46359ba1826d5fc6fccaedc';
 const SCHEMA_PATH = process.env.SXT_SCHEMA_PATH ?? '../data/sxt_stakers.schema.json';
 const LOOKUP_COLUMN_ENV = process.env.SXT_LOOKUP_COLUMN?.trim();
 const OUT_DIR = '../data/proof-plans';
+// POINT_LOOKUP is resolved after pickLookupColumn() runs — we need to know the
+// chosen column before we can grab a sample value from the CSV. See the
+// "auto-detect from CSV" block further down.
+let POINT_LOOKUP = process.env.SXT_POINT_LOOKUP;
 
 // ─── Schema discovery ─────────────────────────────────────────────────
 
@@ -90,6 +94,38 @@ function pickLookupColumn() {
 
 const LOOKUP = pickLookupColumn();
 
+// Auto-detect SXT_POINT_LOOKUP from the published CSV when the env isn't set.
+// This makes the pipeline "just work" for any community CSV — the agent / user
+// doesn't have to peek the file first to find a known membership value.
+// Override via SXT_POINT_LOOKUP still wins (e.g. for a specific demo address).
+let pointLookupSource = 'SXT_POINT_LOOKUP env var';
+if (!POINT_LOOKUP) {
+  // Find the CSV next to the schema: same dir, same base, .csv extension.
+  // DEMO_CSV env (set by the orchestrator) is the authoritative path; the
+  // schema-path-derived guess is the fallback for direct script invocation.
+  const csvPath = process.env.DEMO_CSV ?? SCHEMA_PATH
+    .replace(/\.inferred-schema\.json$/i, '.csv')
+    .replace(/\.schema\.json$/i, '.csv');
+  if (existsSync(csvPath)) {
+    try {
+      const rows = parseCsv(readFileSync(csvPath, 'utf8'), { columns: true, skip_empty_lines: true });
+      if (rows.length > 0) {
+        // Find the row-key matching our lookup column (case-insensitive).
+        const keys = Object.keys(rows[0]);
+        const matchKey = keys.find((k) => k.toUpperCase() === LOOKUP.name);
+        if (matchKey && rows[0][matchKey]) {
+          POINT_LOOKUP = String(rows[0][matchKey]).trim();
+          pointLookupSource = `auto-picked from row 1 of ${csvPath}`;
+        }
+      }
+    } catch (_) { /* fall through to legacy default below */ }
+  }
+}
+if (!POINT_LOOKUP) {
+  POINT_LOOKUP = '0x45c56e138881fd3ff46359ba1826d5fc6fccaedc';
+  pointLookupSource = 'legacy STAKERS default — set SXT_POINT_LOOKUP or DEMO_CSV';
+}
+
 // Format the lookup value as a SQL literal correct for the column type.
 function formatLiteral(value, sqlType) {
   switch (sqlType) {
@@ -128,7 +164,7 @@ const notInLiteral = negativeLiteral(LOOKUP.type);
 console.log(`  Schema:          ${SCHEMA_PATH}`);
 console.log(`  Table:           ${TABLE}`);
 console.log(`  Lookup column:   ${LOOKUP.name} (${LOOKUP.type})${LOOKUP_COLUMN_ENV ? ' [from SXT_LOOKUP_COLUMN]' : ' [auto-picked first VARCHAR]'}`);
-console.log(`  Lookup value:    ${lookupLiteral}`);
+console.log(`  Lookup value:    ${lookupLiteral}  [${pointLookupSource}]`);
 console.log('');
 
 // ─── Plans ────────────────────────────────────────────────────────────

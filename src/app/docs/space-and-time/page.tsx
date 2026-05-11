@@ -52,9 +52,11 @@ api.tx.utility.batchAll([
   api.tx.tables.createTables([{
     ident: { namespace, name: table },
     createStatement: \`CREATE TABLE \${namespace}.\${table} (
-      STAKER VARCHAR NOT NULL,
-      PRIMARY KEY (STAKER)
+      STAKER VARCHAR NOT NULL
     )\`,
+    // No PRIMARY KEY. The MAINNET indexer silently skips tables with a PK
+    // clause, /v1/zkquery returns 422, and on-chain query() locks 100 SXT
+    // for an hour before refund. publish-dataset-cli.mjs strips PKs by default.
     tableType: 'Community',
     commitment: { Empty: { hyperKzg: true } },
     source: { UserCreated: 'agent' },
@@ -72,7 +74,7 @@ api.tx.indexing.submitData(
       <ul>
         <li><strong>Namespace must end with the wallet address</strong> (uppercase hex, no <code>0x</code>). The publish CLI auto-suffixes; effective form: <code>&lt;PREFIX&gt;_&lt;UPPERCASE_HEX_ADDRESS&gt;</code>.</li>
         <li><strong>Every column <code>NOT NULL</code></strong>. Proof of SQL needs deterministic, branchless data.</li>
-        <li><strong>Insert lives on <code>api.tx.indexing.submitData</code></strong> — not <code>api.tx.tables.*</code>. Older internal samples got this wrong.</li>
+        <li><strong>Insert lives on <code>api.tx.indexing.submitData</code></strong> — not <code>api.tx.tables.*</code>. Older community samples got this wrong.</li>
         <li><strong>Arrow vectors must be explicitly typed</strong>. <code>tableFromJSON</code> infers types and produces an IPC stream the runtime rejects with <code>indexing.ArrowExpectedRecordBatchMessage</code>. Build with <code>vectorFromArray(values, new Utf8())</code>.</li>
         <li><strong>Mainnet <code>tableType</code> enum</strong> is <code>Community | PublicPermissionless | CoreBlockchain | SCI | Testing</code>. The names <code>OwnerPermissioned</code> / <code>UserVerified</code> appear in older marketing material but are not on the current runtime.</li>
         <li><strong>Re-running is safe</strong>. The publish script catches <code>tables.VersionAlreadyExists</code> and proceeds to insert.</li>
@@ -85,7 +87,7 @@ api.tx.indexing.submitData(
 
       <h3 id="off-chain">Off-chain: REST API (for SXT-managed tables)</h3>
       <p>
-        For SXT-managed core tables (<code>ETHEREUM.BLOCKS</code> etc.), POST SQL to the prover at <code>https://api.makeinfinite.dev/v1/prove</code>. Auth is a JWT obtained by exchanging a Studio API key at <code>https://proxy.api.makeinfinite.dev/auth/apikey</code>. The <code>sxt-proof-of-sql-sdk</code> npm package wraps both calls.
+        For SXT-managed core tables (<code>ETHEREUM.BLOCKS</code> etc.), POST SQL to the prover at <code>https://api.makeinfinite.dev/v1/zkquery</code>. Auth is a JWT obtained by exchanging a Studio API key at <code>https://proxy.api.makeinfinite.dev/auth/apikey</code>. The <code>sxt-proof-of-sql-sdk</code> npm package wraps both calls.
       </p>
       <p>
         Studio API keys come from <code>app.spaceandtime.ai</code> → My Account → API Authentication. They are different from <code>chain.spaceandtime.io</code> credentials; the two account systems are unrelated.

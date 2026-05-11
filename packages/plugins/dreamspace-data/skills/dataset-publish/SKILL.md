@@ -160,7 +160,7 @@ The script:
 - **Namespace must end with the wallet address (uppercase, without 0x).** The script appends this automatically. Your effective table reference becomes `<PREFIX>_<UPPERCASE_HEX_ADDRESS>.<TABLE>`.
 - **All columns must be `NOT NULL`** — Proof of SQL needs deterministic data, no null branches.
 - **DECIMAL preferred over FLOAT** for numeric data — fixed-point arithmetic is deterministic; floats aren't and break proofs.
-- **Insert via `api.tx.indexing.submitData`, not `api.tx.tables.*`.** The `tables` pallet only exposes DDL (`createNamespace`, `createTables`, `dropTable`, etc.). Data inserts go through the `indexing` pallet. Some older internal tooling tried `tables.insertData` / `tables.insertIntoTable` — those don't exist on the current runtime.
+- **Insert via `api.tx.indexing.submitData`, not `api.tx.tables.*`.** The `tables` pallet only exposes DDL (`createNamespace`, `createTables`, `dropTable`, etc.). Data inserts go through the `indexing` pallet. Some older community samples tried `tables.insertData` / `tables.insertIntoTable` — those don't exist on the current runtime.
 - **Some restricted table types may require additional indexing permissions.** Standard `Community` tables created from a funded account accept `submitData` with no extra setup (verified end-to-end on mainnet). If your table type or quorum config requires `IndexingPallet.SubmitDataForPrivilegedQuorum`, the chain returns a `BadOrigin` and you should load via the chain.spaceandtime.io UI or contact SxT for the permission grant.
 
 ### Minimal pattern (for agents authoring custom variants)
