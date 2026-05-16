@@ -25,59 +25,63 @@ import { loadConfig } from "../lib/config.js";
 import { MissingCredentialError } from "../lib/errors.js";
 import { selectNetwork } from "../lib/network.js";
 
-export const publishDatasetSchema = z.object({
-  file: z
-    .string()
-    .describe(
-      "Absolute or relative path to a CSV file. Parquet and JSON are not yet supported in v0.1.0; " +
-        "for those formats use the CLI script directly until v0.2.0.",
-    ),
-  tableRef: z
-    .string()
-    .regex(/^[A-Z][A-Z0-9_]*\.[A-Z][A-Z0-9_]*$/, "Must be PREFIX.TABLE in UPPERCASE_SNAKE_CASE")
-    .describe(
-      "Logical table reference, e.g. MY_AUDIT.KNOWN_EXPLOITS. The wallet's hex address is " +
-        "auto-appended to the namespace prefix per the SXT chain rule.",
-    ),
-  schema: z
-    .array(
-      z.object({
-        name: z.string(),
-        type: z.enum([
-          "BOOLEAN",
-          "TINYINT",
-          "SMALLINT",
-          "INT",
-          "INTEGER",
-          "BIGINT",
-          "VARCHAR",
-          "BINARY",
-          "TIMESTAMP",
-        ]),
-      }),
-    )
-    .optional()
-    .describe(
-      "Optional explicit column schema. When omitted, the server infers types from the first " +
-        "row (BIGINT for integers, BOOLEAN for true/false, TIMESTAMP for ISO datetimes, VARCHAR " +
-        "fallback). DECIMAL75 is not supported — use the chain.spaceandtime.io UI for that.",
-    ),
-  tableType: z
-    .enum(["Community", "PublicPermissionless", "CoreBlockchain", "SCI", "Testing"])
-    .default("Community")
-    .describe(
-      "SxtCoreTablesTableType — must match the live runtime enum. Default Community for public " +
-        "reference datasets. Do not pass OwnerPermissioned or UserVerified — those names appear " +
-        "in older SXT marketing material but are not valid on the current runtime.",
-    ),
-  mainnet: z
-    .boolean()
-    .default(false)
-    .describe(
-      "Set true to publish to SXT mainnet. Also requires SXT_MCP_ALLOW_MAINNET=I-UNDERSTAND in " +
-        "env. Default false routes to testnet (free credits via chain.spaceandtime.io faucet).",
-    ),
-});
+export const publishDatasetSchema = z
+  .object({
+    file: z
+      .string()
+      .describe(
+        "Absolute or relative path to a CSV file. Parquet and JSON are not yet supported in v0.1.0; " +
+          "for those formats use the CLI script directly until v0.2.0.",
+      ),
+    tableRef: z
+      .string()
+      .regex(/^[A-Z][A-Z0-9_]*\.[A-Z][A-Z0-9_]*$/, "Must be PREFIX.TABLE in UPPERCASE_SNAKE_CASE")
+      .describe(
+        "Logical table reference, e.g. MY_AUDIT.KNOWN_EXPLOITS. The wallet's hex address is " +
+          "auto-appended to the namespace prefix per the SXT chain rule.",
+      ),
+    schema: z
+      .array(
+        z
+          .object({
+            name: z.string(),
+            type: z.enum([
+              "BOOLEAN",
+              "TINYINT",
+              "SMALLINT",
+              "INT",
+              "INTEGER",
+              "BIGINT",
+              "VARCHAR",
+              "BINARY",
+              "TIMESTAMP",
+            ]),
+          })
+          .strict(),
+      )
+      .optional()
+      .describe(
+        "Optional explicit column schema. When omitted, the server infers types from the first " +
+          "row (BIGINT for integers, BOOLEAN for true/false, TIMESTAMP for ISO datetimes, VARCHAR " +
+          "fallback). DECIMAL75 is not supported — use the chain.spaceandtime.io UI for that.",
+      ),
+    tableType: z
+      .enum(["Community", "PublicPermissionless", "CoreBlockchain", "SCI", "Testing"])
+      .default("Community")
+      .describe(
+        "SxtCoreTablesTableType — must match the live runtime enum. Default Community for public " +
+          "reference datasets. Do not pass OwnerPermissioned or UserVerified — those names appear " +
+          "in older SXT marketing material but are not valid on the current runtime.",
+      ),
+    mainnet: z
+      .boolean()
+      .default(false)
+      .describe(
+        "Set true to publish to SXT mainnet. Also requires SXT_MCP_ALLOW_MAINNET=I-UNDERSTAND in " +
+          "env. Default false routes to testnet (free credits via chain.spaceandtime.io faucet).",
+      ),
+  })
+  .strict();
 
 export type PublishDatasetArgs = z.infer<typeof publishDatasetSchema>;
 

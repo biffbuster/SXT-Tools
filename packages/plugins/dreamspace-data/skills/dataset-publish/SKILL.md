@@ -243,7 +243,7 @@ SELECT COUNT(*) AS ROWS_PUBLISHED
 FROM MY_AUDIT.KNOWN_EXPLOITS
 ```
 
-Run this through the SXT REST API at `https://api.makeinfinite.dev/v2/sql` with `proveExecution: true`. If the response includes a proof receipt and the row count matches what you uploaded, the table is committed and ready for downstream skills.
+Run this through the SXT prover at `https://api.makeinfinite.dev/v1/zkquery`. The raw `SXT_API_KEY` is not a Bearer token; exchange it for a 25-minute JWT at `https://proxy.api.makeinfinite.dev/auth/apikey` first. The `sxt-proof-of-sql-sdk` package handles the exchange, submit, poll, and verify flow in one call. The canonical implementation lives in `examples/scripts/verify-stakers.mjs`. If the SDK returns a verified row count that matches what you uploaded, the table is committed and ready for downstream skills.
 
 ## Common datasets worth publishing
 

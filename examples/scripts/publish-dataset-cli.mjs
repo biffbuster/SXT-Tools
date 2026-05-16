@@ -500,12 +500,11 @@ async function main() {
   console.log('');
   console.log(`  Inferred schema:  ${schemaOutPath}`);
   console.log('');
-  console.log('Verify with a proven SELECT:');
+  console.log('Verify with a proven SELECT (uses the SxT SDK, handles JWT exchange + /v1/zkquery flow):');
   console.log('');
-  console.log(`  curl -sS -X POST "https://api.makeinfinite.dev/v2/sql" \\`);
-  console.log(`    -H "Authorization: Bearer $SXT_API_KEY" \\`);
-  console.log(`    -H "Content-Type: application/json" \\`);
-  console.log(`    -d '{"sqlText": "SELECT COUNT(*) AS ROWS FROM ${namespace}.${table}", "proveExecution": true}'`);
+  console.log(`  SXT_TABLE=${namespace}.${table} \\`);
+  console.log(`  SXT_POINT_LOOKUP=<a value you know is in your data> \\`);
+  console.log(`    node examples/scripts/verify-stakers.mjs`);
   console.log('');
 
   await api.disconnect();
