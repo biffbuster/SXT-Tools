@@ -19,57 +19,59 @@ import { loadConfig } from "../lib/config.js";
 import { MissingCredentialError, NetworkConfigError } from "../lib/errors.js";
 import { selectNetwork } from "../lib/network.js";
 
-export const deployContractSchema = z.object({
-  artifactPath: z
-    .string()
-    .describe(
-      "Path to a forge build artifact JSON (e.g. examples/contracts/sxt-onchain-query/" +
-        "out/OnchainQuery.sol/OnchainQuery.json). Relative paths resolve against the MCP " +
-        "server's CWD. The artifact must contain `bytecode.object` and `abi`.",
-    ),
-  contractName: z
-    .string()
-    .optional()
-    .describe(
-      "Optional override for the contract name written to .deploy-state.json. Defaults to " +
-        "the artifact filename (without .json).",
-    ),
-  evmChain: z
-    .enum(["sepolia", "base", "ethereum"])
-    .default("sepolia")
-    .describe(
-      "Target chain. Default sepolia (testnet, chainId 11155111). 'base' or 'ethereum' require " +
-        "mainnet: true AND SXT_MCP_ALLOW_MAINNET=I-UNDERSTAND in env.",
-    ),
-  mainnet: z
-    .boolean()
-    .default(false)
-    .describe(
-      "Mainnet confirmation flag. Must be true to deploy to base/ethereum, AND the env gate " +
-        "must be set. Either alone returns MainnetGateError.",
-    ),
-  constructorArgs: z
-    .array(z.unknown())
-    .default([])
-    .describe(
-      "Optional constructor arguments, in order. Empty array (default) when the constructor " +
-        "takes none. The renderer-generated OnchainQuery.sol contracts have no constructor args.",
-    ),
-  forceRedeploy: z
-    .boolean()
-    .default(false)
-    .describe(
-      "Bypass the .deploy-state.json idempotency guard. Refused on mainnet regardless of this " +
-        "flag — mainnet redeploys must be done manually after verifying the prior address.",
-    ),
-  stateFilePath: z
-    .string()
-    .optional()
-    .describe(
-      "Override path for the .deploy-state.json idempotency file. Default: " +
-        "<artifactDir>/../../.deploy-state.json (matches deploy-onchain-query.mjs).",
-    ),
-});
+export const deployContractSchema = z
+  .object({
+    artifactPath: z
+      .string()
+      .describe(
+        "Path to a forge build artifact JSON (e.g. examples/contracts/sxt-onchain-query/" +
+          "out/OnchainQuery.sol/OnchainQuery.json). Relative paths resolve against the MCP " +
+          "server's CWD. The artifact must contain `bytecode.object` and `abi`.",
+      ),
+    contractName: z
+      .string()
+      .optional()
+      .describe(
+        "Optional override for the contract name written to .deploy-state.json. Defaults to " +
+          "the artifact filename (without .json).",
+      ),
+    evmChain: z
+      .enum(["sepolia", "base", "ethereum"])
+      .default("sepolia")
+      .describe(
+        "Target chain. Default sepolia (testnet, chainId 11155111). 'base' or 'ethereum' require " +
+          "mainnet: true AND SXT_MCP_ALLOW_MAINNET=I-UNDERSTAND in env.",
+      ),
+    mainnet: z
+      .boolean()
+      .default(false)
+      .describe(
+        "Mainnet confirmation flag. Must be true to deploy to base/ethereum, AND the env gate " +
+          "must be set. Either alone returns MainnetGateError.",
+      ),
+    constructorArgs: z
+      .array(z.unknown())
+      .default([])
+      .describe(
+        "Optional constructor arguments, in order. Empty array (default) when the constructor " +
+          "takes none. The renderer-generated OnchainQuery.sol contracts have no constructor args.",
+      ),
+    forceRedeploy: z
+      .boolean()
+      .default(false)
+      .describe(
+        "Bypass the .deploy-state.json idempotency guard. Refused on mainnet regardless of this " +
+          "flag — mainnet redeploys must be done manually after verifying the prior address.",
+      ),
+    stateFilePath: z
+      .string()
+      .optional()
+      .describe(
+        "Override path for the .deploy-state.json idempotency file. Default: " +
+          "<artifactDir>/../../.deploy-state.json (matches deploy-onchain-query.mjs).",
+      ),
+  })
+  .strict();
 
 export type DeployContractArgs = z.infer<typeof deployContractSchema>;
 

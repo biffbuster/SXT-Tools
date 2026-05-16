@@ -16,33 +16,38 @@
 
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFile, readdir, stat, writeFile } from "node:fs/promises";
-import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
+import { readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 
-export const auditContractSchema = z.object({
-  sourcePath: z
-    .string()
-    .describe(
-      "Path to a Foundry project root (containing foundry.toml + src/) or a single " +
-        ".sol file. Relative paths are resolved against the MCP server's CWD.",
-    ),
-  slither: z
-    .boolean()
-    .default(true)
-    .describe(
-      "Run slither static analysis if available on PATH. Default true; the tool " +
-        "fails-soft when slither is missing — it skips the slither step with a hint " +
-        "rather than failing the whole audit.",
-    ),
-  outputPath: z
-    .string()
-    .optional()
-    .describe(
-      "Optional path to write a Markdown rendering of the report (AUDIT_REPORT.md). " +
-        "When omitted, only the structured JSON is returned.",
-    ),
-});
+export const auditContractSchema = z
+  .object({
+    sourcePath: z
+      .string()
+      .describe(
+        "Path to a Foundry project root (containing foundry.toml + src/) or a single " +
+          ".sol file. Relative paths are resolved against the MCP server's CWD. " +
+          "Must resolve inside SXT_MCP_AUDIT_ROOT (default: cwd) — paths outside the " +
+          "sandbox are refused.",
+      ),
+    slither: z
+      .boolean()
+      .default(true)
+      .describe(
+        "Run slither static analysis if available on PATH. Default true; the tool " +
+          "fails-soft when slither is missing — it skips the slither step with a hint " +
+          "rather than failing the whole audit.",
+      ),
+    outputPath: z
+      .string()
+      .optional()
+      .describe(
+        "Optional path to write a Markdown rendering of the report (AUDIT_REPORT.md). " +
+          "When omitted, only the structured JSON is returned. Must resolve inside " +
+          "SXT_MCP_AUDIT_ROOT (same sandbox as sourcePath).",
+      ),
+  })
+  .strict();
 
 export type AuditContractArgs = z.infer<typeof auditContractSchema>;
 
@@ -102,8 +107,46 @@ interface ResolvedTarget {
   hasFoundryToml: boolean;
 }
 
+function getSandboxRoot(): string {
+  const root = process.env.SXT_MCP_AUDIT_ROOT;
+  return root && root.length > 0 ? resolve(root) : process.cwd();
+}
+
+/**
+ * Resolve an input path to its real on-disk path and verify it sits inside
+ * the audit sandbox. Follows symlinks (so a symlink-out-of-root attack fails).
+ * For paths that don't exist yet (e.g. outputPath we're about to write), we
+ * realpath the parent dir then join the basename — catches symlinked parents.
+ */
+async function resolveSandboxedPath(
+  inputPath: string,
+  label: "sourcePath" | "outputPath",
+): Promise<string> {
+  const root = getSandboxRoot();
+  const abs = isAbsolute(inputPath) ? inputPath : resolve(process.cwd(), inputPath);
+
+  let real: string;
+  try {
+    real = await realpath(abs);
+  } catch {
+    const parent = dirname(abs);
+    const realParent = await realpath(parent).catch(() => parent);
+    real = resolve(realParent, basename(abs));
+  }
+
+  const realRoot = await realpath(root).catch(() => root);
+
+  if (real !== realRoot && !real.startsWith(realRoot + sep)) {
+    throw new Error(
+      `${label} resolves to ${real}, which is outside the audit sandbox ${realRoot}. ` +
+        "Set SXT_MCP_AUDIT_ROOT to widen the sandbox, or pass a path inside it.",
+    );
+  }
+  return real;
+}
+
 async function resolveTarget(sourcePath: string): Promise<ResolvedTarget> {
-  const abs = isAbsolute(sourcePath) ? sourcePath : resolve(process.cwd(), sourcePath);
+  const abs = await resolveSandboxedPath(sourcePath, "sourcePath");
   let info;
   try {
     info = await stat(abs);
@@ -545,9 +588,7 @@ export async function auditContractHandler(args: AuditContractArgs): Promise<Aud
   };
 
   if (args.outputPath) {
-    const outPath = isAbsolute(args.outputPath)
-      ? args.outputPath
-      : resolve(process.cwd(), args.outputPath);
+    const outPath = await resolveSandboxedPath(args.outputPath, "outputPath");
     await writeFile(outPath, renderMarkdown(report), "utf8");
   }
 

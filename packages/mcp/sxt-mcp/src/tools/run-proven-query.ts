@@ -26,22 +26,24 @@ const PROVER_URL = process.env.SXT_PROVER ?? "https://api.makeinfinite.dev";
 const AUTH_URL = process.env.SXT_AUTH ?? "https://proxy.api.makeinfinite.dev/auth/apikey";
 const RPC_HTTP = process.env.SXT_RPC_HTTP ?? "https://rpc.mainnet.sxt.network/";
 
-export const runProvenQuerySchema = z.object({
-  tableRef: z
-    .string()
-    .regex(/^[A-Z][A-Z0-9_]*\.[A-Z][A-Z0-9_]*$/, "Must be PREFIX.TABLE in UPPERCASE_SNAKE_CASE")
-    .describe(
-      "Fully-qualified SXT table reference, e.g. MY_AUDIT.STAKERS_HEX_SUFFIX. " +
-        "Used to validate the SQL FROM clause references the expected table.",
-    ),
-  sql: z
-    .string()
-    .describe(
-      "Complete SELECT statement, including FROM <tableRef>. Must compile against " +
-        "the proven SQL surface. Common refusals: windowed aggregates (OVER ...), " +
-        "recursive CTEs, DML, DDL. See sxt://docs/proof-of-sql-foundations.",
-    ),
-});
+export const runProvenQuerySchema = z
+  .object({
+    tableRef: z
+      .string()
+      .regex(/^[A-Z][A-Z0-9_]*\.[A-Z][A-Z0-9_]*$/, "Must be PREFIX.TABLE in UPPERCASE_SNAKE_CASE")
+      .describe(
+        "Fully-qualified SXT table reference, e.g. MY_AUDIT.STAKERS_HEX_SUFFIX. " +
+          "Used to validate the SQL FROM clause references the expected table.",
+      ),
+    sql: z
+      .string()
+      .describe(
+        "Complete SELECT statement, including FROM <tableRef>. Must compile against " +
+          "the proven SQL surface. Common refusals: windowed aggregates (OVER ...), " +
+          "recursive CTEs, DML, DDL. See sxt://docs/proof-of-sql-foundations.",
+      ),
+  })
+  .strict();
 
 export type RunProvenQueryArgs = z.infer<typeof runProvenQuerySchema>;
 
