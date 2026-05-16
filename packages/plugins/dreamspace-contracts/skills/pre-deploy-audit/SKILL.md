@@ -102,24 +102,32 @@ sha256sum ./contracts/MyToken.sol | awk '{print "0x"$1}'
 
 If the user passes a known demo-marker hash (e.g., `--demo` flag or pasted hash), skip this step and use their value.
 
-**Step 2 — Query SXT with `proveExecution: true`.**
+**Step 2. Query SXT with Proof of SQL via the SDK.**
 
-```bash
-HASH="0x<computed-hash-from-step-1>"
-TABLE="${REFERENCE_TABLE:-MY_AUDIT.KNOWN_EXPLOITS}"
+The `/v1/zkquery` flow requires a JWT exchanged from your raw API key first. The `sxt-proof-of-sql-sdk` package handles the exchange, submit, poll, and proof verification in one call. Mirror the pattern in `examples/scripts/verify-stakers.mjs`:
 
-curl -sS -X POST "https://api.makeinfinite.dev/v2/sql" \
-  -H "Authorization: Bearer $SXT_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"sqlText\": \"SELECT BYTECODE_HASH, EXPLOIT_TYPE, SEVERITY, SOURCE_URL FROM $TABLE WHERE BYTECODE_HASH = '$HASH'\",
-    \"proveExecution\": true
-  }"
+```javascript
+import { SxTClient } from 'sxt-proof-of-sql-sdk';
+
+const client = new SxTClient(
+  'https://api.makeinfinite.dev',
+  'https://proxy.api.makeinfinite.dev/auth/apikey',
+  'https://rpc.mainnet.sxt.network/',
+  process.env.SXT_API_KEY,
+);
+
+const HASH = '0x<computed-hash-from-step-1>';
+const TABLE = process.env.REFERENCE_TABLE ?? 'MY_AUDIT.KNOWN_EXPLOITS';
+const sql = `SELECT BYTECODE_HASH, EXPLOIT_TYPE, SEVERITY, SOURCE_URL FROM ${TABLE} WHERE BYTECODE_HASH = '${HASH}'`;
+
+const result = await client.queryAndVerify(sql);
 ```
 
-**Step 3 — Parse the response.**
+The runnable script `examples/scripts/audit-with-sxt.mjs` does exactly this. Defer to it rather than rebuilding the call by hand.
 
-The response JSON includes `rows` (the matching records) and a proof receipt — different SXT API versions name the receipt field differently (`proofReceipt`, `proof_receipt`, `proof.receipt`, or `proof.hash`). Try each in order; print the raw response if none are found and tell the user the field shape needs adjusting.
+**Step 3. Parse the verified result.**
+
+`client.queryAndVerify(sql)` returns the rows after the proof has been verified locally. The SDK throws on prover or verifier error; otherwise the rows are trustworthy.
 
 If `rows` is non-empty, surface the match as a finding with severity from the `SEVERITY` column.
 

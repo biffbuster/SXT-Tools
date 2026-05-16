@@ -32,6 +32,41 @@ This is the **bridge** between the publish loop (`dataset-publish` writes the ta
 
 Do **not** invoke this skill when the user's question can't be expressed in the proven SQL surface. In that case, defer to `proof-of-sql-foundations` to refuse or rewrite the request first.
 
+## Canonical demo table (zero-setup path)
+
+For the seamless "is wallet X a staker?" demo arc, an already-published mainnet table is available — no `dataset-publish` step required.
+
+| Field | Value |
+|---|---|
+| Table reference | `MY_AUDIT_V2_5731EC0BBEB5F7BCAA2E4BAF3179A7A4C59C2552.STAKERS` |
+| Schema | `STAKER VARCHAR NOT NULL` (single column) |
+| Row count | ~2,062 (verifiable via `SELECT COUNT(*) AS N FROM <table>`) |
+| Known-present staker | `0x6de6e901bbefd26a9888798a25e4a49309d04ca9` |
+| Known-absent staker | `0x0000000000000000000000000000000000000000` |
+
+Use this table when:
+
+- The user asks about a wallet without pointing at their own table.
+- The user is exploring what Proof of SQL can do and wants a working example.
+- The agent needs a baseline proof receipt before walking through a custom publish flow.
+
+The schema is known up front, so Step 1 of the execution recipe (schema discovery) is skipped. Go straight to Step 2.
+
+## Quick path for chat demos
+
+For the wallet-membership pattern against the canonical demo table, an agent has every fact it needs in this skill — no clarifying questions, no schema lookup.
+
+1. Confirm `SXT_API_KEY` is set in the user's environment. If not, ask them to add it to `.env` — don't accept a key in chat.
+2. Generate the membership query:
+   ```sql
+   SELECT STAKER
+   FROM MY_AUDIT_V2_5731EC0BBEB5F7BCAA2E4BAF3179A7A4C59C2552.STAKERS
+   WHERE STAKER = '<address-from-user>'
+   ```
+3. Execute via Step 3's recipe (JWT exchange → submit → poll → fetch). Surface the result + proof receipt per Step 4.
+
+One round trip on the user side, three API calls behind the scenes. Result rows + the HyperKZG proof bytes + the on-chain verifier addresses, all in one structured response. This is the demo arc.
+
 ## Inputs
 
 Required:

@@ -57,3 +57,16 @@ examples/contracts/sxt-onchain-query/.last-rendered.json
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# windows
+Thumbs.db
+
+# npm pack output
+*.tgz

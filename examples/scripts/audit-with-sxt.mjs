@@ -16,10 +16,14 @@
  *   SXT_TABLE     Override the reference table. Default: MY_AUDIT.KNOWN_EXPLOITS
  */
 
+import 'dotenv/config';
 import { readFileSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { SxTClient } from 'sxt-proof-of-sql-sdk';
 
-const API_BASE = process.env.SXT_API_BASE ?? 'https://api.makeinfinite.dev';
+const PROVER = process.env.SXT_PROVER ?? 'https://api.makeinfinite.dev';
+const AUTH   = process.env.SXT_AUTH   ?? 'https://proxy.api.makeinfinite.dev/auth/apikey';
+const RPC    = process.env.SXT_RPC_HTTP ?? 'https://rpc.mainnet.sxt.network/';
 const TABLE = process.env.SXT_TABLE ?? 'MY_AUDIT.KNOWN_EXPLOITS';
 const DEMO_HASH = '0xDEM0DEM0DEM0DEM0DEM0DEM0DEM0DEM0DEM0DEM0DEM0DEM0DEM0DEM0DEM0DEM0';
 
@@ -77,73 +81,34 @@ async function main() {
 
   console.log('');
   console.log(`▶ Querying ${TABLE} via Proof of SQL...`);
-  console.log(`  Endpoint: ${API_BASE}/v2/sql`);
-  console.log(`  SQL: ${sql}`);
+  console.log(`  Prover:   ${PROVER}/v1/zkquery`);
+  console.log(`  SQL:      ${sql}`);
   console.log('');
 
-  const url = `${API_BASE}/v2/sql`;
-  let response;
-  try {
-    response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        sqlText: sql,
-        proveExecution: true,
-      }),
-    });
-  } catch (err) {
-    console.error(`✗ Network error: ${err.message}`);
-    console.error('  Confirm SXT_API_BASE is correct and your network can reach it.');
-    process.exit(1);
-  }
-
-  const text = await response.text();
-  if (!response.ok) {
-    console.error(`✗ SXT API returned ${response.status}`);
-    console.error(`  Body: ${text}`);
-    console.error('');
-    console.error('  Common causes:');
-    console.error('    - Compute credits not funded. Top up at chain.spaceandtime.io.');
-    console.error('    - Reference table does not exist yet. Publish MY_AUDIT.KNOWN_EXPLOITS first via chain.spaceandtime.io UI.');
-    console.error('    - SXT_API_BASE or endpoint path is wrong. Confirm against current docs at docs.spaceandtime.io.');
-    console.error('    - API key lacks dql_select permission on the table.');
-    process.exit(1);
-  }
-
+  const client = new SxTClient(PROVER, AUTH, RPC, apiKey);
   let result;
   try {
-    result = JSON.parse(text);
-  } catch {
-    console.error('✗ SXT response was not valid JSON. Raw body:');
-    console.error(text);
+    result = await client.queryAndVerify(sql);
+  } catch (err) {
+    console.error(`✗ SXT prover error: ${err?.message ?? err}`);
+    console.error('');
+    console.error('  Common causes:');
+    console.error('    - Reference table not in the MAINNET catalog (most often a PRIMARY KEY in the original DDL).');
+    console.error('    - SXT_API_KEY is missing or expired.');
+    console.error('    - Reference table does not exist yet. Publish MY_AUDIT.KNOWN_EXPLOITS first via the dataset-publish skill or chain.spaceandtime.io UI.');
     process.exit(1);
   }
 
-  console.log('--- Raw response ---');
+  console.log('--- Verified result ---');
   console.log(JSON.stringify(result, null, 2));
   console.log('');
 
-  // Different SXT REST builds expose proof receipts under different keys.
-  // Print whichever one we find.
-  const proofReceipt =
-    result.proofReceipt ??
-    result.proof_receipt ??
-    result.proof?.receipt ??
-    result.proof?.hash ??
-    null;
-
-  const rows =
-    result.rows ??
-    result.data ??
-    result.result?.rows ??
-    [];
+  const rows = Array.isArray(result?.rows) ? result.rows
+    : Array.isArray(result?.data) ? result.data
+    : [];
 
   console.log('--- Audit verdict ---');
-  if (Array.isArray(rows) && rows.length > 0) {
+  if (rows.length > 0) {
     const match = rows[0];
     const exploitType = match.EXPLOIT_TYPE ?? match.exploit_type ?? '(unknown)';
     const severity = match.SEVERITY ?? match.severity ?? '(unknown)';
@@ -153,23 +118,17 @@ async function main() {
     console.log(`  Exploit:    ${exploitType}`);
     console.log(`  Severity:   ${severity}`);
     console.log(`  Source:     ${source}`);
-    console.log(`  Verdict:    BLOCK DEPLOY — investigate before proceeding`);
+    console.log(`  Verdict:    BLOCK DEPLOY. Investigate before proceeding.`);
   } else {
     console.log(`✓ No match found for ${bytecodeHash} in ${TABLE}.`);
-    console.log('  This does not mean the contract is safe — it only means the hash');
+    console.log('  This does not mean the contract is safe. It means the hash');
     console.log('  is not in your reference dataset. Combine with static analysis.');
   }
 
   console.log('');
-  if (proofReceipt) {
-    console.log(`Proof receipt: ${proofReceipt}`);
-    console.log('Verify against the SxT Onchain Verifier:');
-    console.log('  Ethereum: 0x55780Ba21EdFBbFEb7033a0F2FC5Cf55Cd62ACf9');
-    console.log('  Base:     0x13b7463a07Aac6Bd483E4329a7F6768Da1A65518');
-  } else {
-    console.log('Note: no proof receipt field found in the response.');
-    console.log('Confirm `proveExecution: true` is the correct flag for your SxT API version.');
-  }
+  console.log('Proof verified locally by the SxT SDK. The receipt is also on-chain-verifiable via:');
+  console.log('  Ethereum verifier: 0x55780Ba21EdFBbFEb7033a0F2FC5Cf55Cd62ACf9');
+  console.log('  Base verifier:     0x13b7463a07Aac6Bd483E4329a7F6768Da1A65518');
 }
 
 main().catch((err) => {
