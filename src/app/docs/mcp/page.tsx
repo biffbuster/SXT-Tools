@@ -204,16 +204,126 @@ cd sxt-tools && npm install   # root postinstall builds the MCP server`}</code>
       </div>
 
       <h2 id="transport">Transport</h2>
+      <p>Two binaries ship in v0.1.0, mapped to two use cases.</p>
+
+      <table className="comparison-table">
+        <thead>
+          <tr>
+            <th>Binary</th>
+            <th>Transport</th>
+            <th>Tools exposed</th>
+            <th>For</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>sxt-mcp</code></td>
+            <td>stdio</td>
+            <td>All four (<code>publish</code>, <code>run_proven_query</code>, <code>audit</code>, <code>deploy</code>)</td>
+            <td>Claude Desktop, Claude Code, Cursor</td>
+          </tr>
+          <tr>
+            <td><code>sxt-mcp-http</code></td>
+            <td>Streamable HTTP</td>
+            <td>Read-only <code>sxt.run_proven_query</code></td>
+            <td>ChatGPT Developer Mode, hosted web-MCP clients</td>
+          </tr>
+        </tbody>
+      </table>
+
       <p>
-        Default is <strong>stdio</strong> — the local desktop hosts (Claude Desktop,
-        Cursor) spawn the server as a child process and communicate over its stdin /
-        stdout. No ports, no listening sockets.
+        The HTTP binary deliberately narrows to one tool. Publish and deploy need a private key, audit needs filesystem access — neither belongs on a network-exposed endpoint. Read-only proof queries do, and that&apos;s what gets exposed.
       </p>
       <p>
-        Optional <strong>HTTP/SSE</strong> transport for hosted clients will land
-        post-v0.1. Run with <code>npx @biffbuster/sxt-mcp --transport=http --port=3845</code>
-        and point the host at <code>http://localhost:3845/sse</code>. Useful for remote
-        hosts and for sandboxing the server in a container.
+        Default bind is loopback (<code>127.0.0.1:3333</code>). Exposing to a remote client requires a bearer token (constant-time comparison) plus host-header and Origin allowlists. Tunneling the loopback server through <code>cloudflared</code> or <code>ngrok</code> is the supported pattern today.
+      </p>
+
+      <h2 id="roadmap">Roadmap to production</h2>
+      <p>
+        v0.1.0 is <strong>single-tenant</strong>: one set of credentials in the host&apos;s MCP config, one user per server process. That&apos;s the right shape for personal use on Claude Desktop, Cursor, and Claude Code. The path beyond that — hosted multi-user deployments listed on claude.ai integrations, ChatGPT Developer Mode, or equivalents — is a two-step lift. Step 1 is purely engineering. Step 2 needs SXT team coordination.
+      </p>
+
+      <h3 id="v02">v0.2.0 — Hosted multitenant HTTP with OAuth</h3>
+      <p>
+        The MCP 2025-06 spec adds OAuth 2.1 with PKCE for HTTP transport. With that, one running server can serve many users, each authenticated and isolated.
+      </p>
+      <table className="comparison-table">
+        <thead>
+          <tr><th>What changes</th><th>Why it&apos;s needed</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>OAuth 2.1 + PKCE flow per user</td>
+            <td>Replaces the shared bearer token. Each user authenticates separately and the server gets a short-lived per-user token.</td>
+          </tr>
+          <tr>
+            <td>Per-request credential resolution</td>
+            <td>No more shared <code>process.env.PRIVATE_KEY</code>. The server resolves the active tenant&apos;s credentials per call.</td>
+          </tr>
+          <tr>
+            <td>Tenant isolation in tool handlers</td>
+            <td>No shared state between calls. Audit sandbox paths, deploy-state files, and rate buckets all become per-tenant.</td>
+          </tr>
+          <tr>
+            <td>Encrypted credential store</td>
+            <td>Per-user SXT API key and signer key, encrypted at rest (DB or KMS).</td>
+          </tr>
+          <tr>
+            <td>Per-tenant audit log + rate limit</td>
+            <td>Observability and abuse control for a public endpoint.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Scope estimate: ~2 weeks. Server stays open source. Can be self-hosted or hosted under any operator. No external dependency.
+      </p>
+
+      <h3 id="v10">v1.0.0 — Sanctioned production launch</h3>
+      <p>
+        Five things community work alone can&apos;t deliver. Each is a coordination point with the SXT team.
+      </p>
+      <table className="comparison-table">
+        <thead>
+          <tr><th>What&apos;s needed</th><th>Why it requires SXT team input</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Removal of the &quot;not endorsed&quot; disclaimer</td>
+            <td><code>SAFETY.md</code> today states the server is built independently. Production requires sign-off on the tool surface and security posture.</td>
+          </tr>
+          <tr>
+            <td>Elevated API rate limits or OAuth federation</td>
+            <td>Current per-key limits work for single-user CLI. A hosted multi-user service needs either provisioned higher limits, or federated OAuth so each user spends their own quota.</td>
+          </tr>
+          <tr>
+            <td>Reviewed mainnet surface</td>
+            <td>Today&apos;s <code>mainnet: true</code> double-gate is self-imposed. Production policy on which mainnet operations are safe to expose to OAuth users needs SXT team input.</td>
+          </tr>
+          <tr>
+            <td>Listing in official integration directories</td>
+            <td>claude.ai integrations, ChatGPT connectors, and equivalents list servers under a verified brand. Endorsement is the gate.</td>
+          </tr>
+          <tr>
+            <td>Brand alignment</td>
+            <td>The <code>dreamspace-*</code> plugin slugs are legacy. Production naming aligns with whatever the SXT team prefers for an official integration.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3 id="engage">How to engage</h3>
+      <p>The repo is designed to make external review easy:</p>
+      <ul>
+        <li>Each tool handler mirrors a canonical script under <code>examples/scripts/</code> line for line — no novel protocol logic to audit</li>
+        <li><code>SAFETY.md</code> is the contract: phased rollout, mainnet double-gate, dependency surface per phase</li>
+        <li>The parity test (<code>mcp-parity-test.mjs</code>) proves the MCP wrapping matches the SDK directly, byte-for-byte</li>
+        <li>Day 1 hardening is in place: <code>zod.strict()</code> input validation, audit path sandbox, structured logger, per-tool annotations</li>
+      </ul>
+      <p>
+        Open a discussion at{" "}
+        <a href="https://github.com/biffbuster/sxt-tools/discussions" target="_blank" rel="noopener noreferrer">
+          github.com/biffbuster/sxt-tools/discussions
+        </a>{" "}
+        referencing the <code>SAFETY.md</code> contract.
       </p>
 
       <h2 id="building">Build &amp; contribute</h2>

@@ -196,7 +196,7 @@ if (match) {
   log(`  ✓ Parity confirmed — MCP wrapping is a correct protocol adapter.`);
   log(`    MCP overhead: ${mcpResult.elapsedMs - sdkResult.elapsedMs}ms over direct SDK.`);
 } else {
-  log(`  ✗ Outputs DIVERGED — MCP layer is lossy. Investigate before pitch.`);
+  log(`  ✗ Outputs DIVERGED — MCP layer is lossy. Investigate before relying on the MCP path.`);
 }
 
 if (JSON_OUT) {
