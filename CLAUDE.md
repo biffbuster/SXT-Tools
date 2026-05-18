@@ -98,7 +98,7 @@ done
 # Wallet/network state (when changes affect the pipeline)
 cd examples/scripts && node bootstrap.mjs --status
 
-# Pitch/demo readiness — fast aggregate check (no chain, no spend)
+# Demo readiness — fast aggregate check (no chain, no spend)
 node examples/scripts/preflight.mjs
 
 # Demo arc rehearsal — measures wall-clock per step against budgets

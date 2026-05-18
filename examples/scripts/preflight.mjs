@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * preflight.mjs — pitch-grade demo readiness check.
+ * preflight.mjs — end-to-end demo readiness check.
  *
  * Runs every check that should be green before the live demo begins. Covers
  * the surfaces that bootstrap.mjs doesn't:
