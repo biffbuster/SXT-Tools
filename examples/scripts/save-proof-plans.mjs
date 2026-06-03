@@ -30,15 +30,36 @@
  * StakersQuery.sol / OnchainQuery.sol contracts.
  */
 import 'dotenv/config';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { dirname, join, resolve as resolvePath } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parse as parseCsv } from 'csv-parse/sync';
+import { readLastPublish, planDirFor } from './lib/last-publish.mjs';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+
+// Resolution order (per skill design):
+//   1. Explicit env var
+//   2. .last-publish.json handoff (written by publish-dataset-cli.mjs)
+//   3. Legacy canonical-demo default (so re-running with no args reproduces
+//      the proof plans baked into StakersQuery.sol)
+const handoff = readLastPublish();
 
 const RPC = process.env.SXT_RPC_HTTP ?? 'https://rpc.mainnet.sxt.network';
-const TABLE = process.env.SXT_TABLE ?? 'MY_AUDIT_V2_5731EC0BBEB5F7BCAA2E4BAF3179A7A4C59C2552.STAKERS';
-const SCHEMA_PATH = process.env.SXT_SCHEMA_PATH ?? '../data/sxt_stakers.schema.json';
-const LOOKUP_COLUMN_ENV = process.env.SXT_LOOKUP_COLUMN?.trim();
-const OUT_DIR = '../data/proof-plans';
+const TABLE = process.env.SXT_TABLE
+  ?? handoff?.tableRef
+  ?? 'MY_AUDIT_V2_5731EC0BBEB5F7BCAA2E4BAF3179A7A4C59C2552.STAKERS';
+const SCHEMA_PATH = process.env.SXT_SCHEMA_PATH
+  ?? handoff?.schemaPath
+  ?? resolvePath(HERE, '..', 'data', 'sxt_stakers.schema.json');
+const LOOKUP_COLUMN_ENV = process.env.SXT_LOOKUP_COLUMN?.trim() ?? handoff?.lookupColumn ?? null;
+const BASE_PLAN_DIR = resolvePath(HERE, '..', 'data', 'proof-plans');
+// Per-dataset subdir so a second publish doesn't stomp the first user's
+// plans. The canonical STAKERS demo writes to the root for back-compat.
+const OUT_DIR = process.env.SXT_PLAN_DIR
+  ? resolvePath(process.env.SXT_PLAN_DIR)
+  : planDirFor(TABLE, BASE_PLAN_DIR);
+mkdirSync(OUT_DIR, { recursive: true });
 // POINT_LOOKUP is resolved after pickLookupColumn() runs — we need to know the
 // chosen column before we can grab a sample value from the CSV. See the
 // "auto-detect from CSV" block further down.
@@ -50,9 +71,11 @@ if (!existsSync(SCHEMA_PATH)) {
   console.error(`✗ Schema file not found: ${SCHEMA_PATH}`);
   console.error('');
   console.error('  publish-dataset-cli.mjs writes <csv-base>.inferred-schema.json next');
-  console.error('  to the CSV after a successful publish. Either:');
-  console.error('    • Set SXT_SCHEMA_PATH to that file, or');
-  console.error('    • Hand-curate a schema JSON at the default path.');
+  console.error('  to the CSV after a successful publish, and a handoff at');
+  console.error('  examples/data/.last-publish.json so this script picks it up');
+  console.error('  automatically. Either:');
+  console.error('    • Run publish-dataset-cli.mjs first, or');
+  console.error('    • Set SXT_SCHEMA_PATH to your schema JSON.');
   process.exit(1);
 }
 
@@ -100,10 +123,9 @@ const LOOKUP = pickLookupColumn();
 // Override via SXT_POINT_LOOKUP still wins (e.g. for a specific demo address).
 let pointLookupSource = 'SXT_POINT_LOOKUP env var';
 if (!POINT_LOOKUP) {
-  // Find the CSV next to the schema: same dir, same base, .csv extension.
-  // DEMO_CSV env (set by the orchestrator) is the authoritative path; the
-  // schema-path-derived guess is the fallback for direct script invocation.
-  const csvPath = process.env.DEMO_CSV ?? SCHEMA_PATH
+  // Find the CSV: handoff record wins, then DEMO_CSV env (set by the
+  // orchestrator), then the schema-path-derived guess as last resort.
+  const csvPath = handoff?.csvPath ?? process.env.DEMO_CSV ?? SCHEMA_PATH
     .replace(/\.inferred-schema\.json$/i, '.csv')
     .replace(/\.schema\.json$/i, '.csv');
   if (existsSync(csvPath)) {
@@ -161,10 +183,16 @@ function negativeLiteral(sqlType) {
 const lookupLiteral = formatLiteral(POINT_LOOKUP, LOOKUP.type);
 const notInLiteral = negativeLiteral(LOOKUP.type);
 
+const lookupSource = process.env.SXT_LOOKUP_COLUMN
+  ? 'from SXT_LOOKUP_COLUMN'
+  : handoff?.lookupColumn
+    ? 'from .last-publish.json handoff'
+    : 'auto-picked first VARCHAR';
 console.log(`  Schema:          ${SCHEMA_PATH}`);
-console.log(`  Table:           ${TABLE}`);
-console.log(`  Lookup column:   ${LOOKUP.name} (${LOOKUP.type})${LOOKUP_COLUMN_ENV ? ' [from SXT_LOOKUP_COLUMN]' : ' [auto-picked first VARCHAR]'}`);
+console.log(`  Table:           ${TABLE}${handoff && !process.env.SXT_TABLE ? ' [from .last-publish.json]' : ''}`);
+console.log(`  Lookup column:   ${LOOKUP.name} (${LOOKUP.type}) [${lookupSource}]`);
 console.log(`  Lookup value:    ${lookupLiteral}  [${pointLookupSource}]`);
+console.log(`  Output dir:      ${OUT_DIR}`);
 console.log('');
 
 // ─── Plans ────────────────────────────────────────────────────────────
@@ -221,6 +249,7 @@ for (const plan of plans) {
     proofPlanBytes: (json.result.proofPlan.length - 2) / 2,
     note: 'Drop the proofPlan into a Solidity contract as `bytes public constant QUERY_PLAN = hex"<plan-without-0x>";` then submit via IQueryRouter.requestQuery() per the SXT onchain_hello_world_query tutorial.',
   };
-  writeFileSync(join(OUT_DIR, `${plan.name}.json`), JSON.stringify(artifact, null, 2) + '\n');
-  console.log(`✓ ${plan.name}.json (${artifact.proofPlanBytes} bytes plan, at ${artifact.chainStateAt?.substring(0, 14) ?? '?'}...)`);
+  const outPath = join(OUT_DIR, `${plan.name}.json`);
+  writeFileSync(outPath, JSON.stringify(artifact, null, 2) + '\n');
+  console.log(`✓ ${outPath} (${artifact.proofPlanBytes} bytes plan, at ${artifact.chainStateAt?.substring(0, 14) ?? '?'}...)`);
 }

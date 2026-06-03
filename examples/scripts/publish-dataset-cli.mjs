@@ -58,7 +58,9 @@ import {
 import { parse as parseCsv } from 'csv-parse/sync';
 import { Wallet } from 'ethers';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { basename, resolve as resolvePath } from 'node:path';
 import { EthEcdsaSigner } from './ethecdsa_signer.mjs';
+import { writeLastPublish, readLastPublish, extractPrefix } from './lib/last-publish.mjs';
 
 const RPC = process.env.SXT_RPC ?? 'wss://rpc.mainnet.sxt.network';
 const TABLE_TYPE = process.env.SXT_TABLE_TYPE ?? 'Community';
@@ -67,10 +69,11 @@ const TABLE_TYPE = process.env.SXT_TABLE_TYPE ?? 'Community';
 // Argument parsing
 
 function parseArgs(argv) {
-  const args = { csvPath: null, tableRef: null, schemaPath: null };
+  const args = { csvPath: null, tableRef: null, schemaPath: null, lookupColumn: null };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--schema') args.schemaPath = argv[++i];
+    else if (a === '--lookup-column') args.lookupColumn = argv[++i];
     else if (a === '-h' || a === '--help') args.help = true;
     else if (!args.csvPath) args.csvPath = a;
     else if (!args.tableRef) args.tableRef = a;
@@ -80,15 +83,26 @@ function parseArgs(argv) {
 
 function printUsage() {
   console.error('Usage:');
-  console.error('  node publish-dataset-cli.mjs <csv-path> <PREFIX.TABLE> [--schema <schema.json>]');
+  console.error('  node publish-dataset-cli.mjs <csv-path> [<PREFIX.TABLE>] [--schema <schema.json>] [--lookup-column NAME]');
   console.error('');
-  console.error('Example:');
-  console.error('  node publish-dataset-cli.mjs \\');
-  console.error('    ../data/known-exploits-sample.csv \\');
-  console.error('    MY_AUDIT.KNOWN_EXPLOITS \\');
-  console.error('    --schema ../data/known-exploits-sample.schema.json');
+  console.error('Examples:');
+  console.error('  # First publish — pick your own project-scoped prefix.');
+  console.error('  # The chain auto-appends your wallet hex so namespaces never collide.');
+  console.error('  node publish-dataset-cli.mjs ./examples/data/validators.csv MY_PROJECT.VALIDATORS');
   console.error('');
-  console.error('Required: PRIVATE_KEY env var (0x-prefixed Ethereum private key).');
+  console.error('  # Subsequent publish — omit PREFIX.TABLE. The CLI reads .last-publish.json');
+  console.error('  # and reuses your prior prefix; the table portion is derived from the CSV name.');
+  console.error('  node publish-dataset-cli.mjs ./examples/data/members.csv  # → MY_PROJECT.MEMBERS');
+  console.error('');
+  console.error('  # Pin the membership-proof column for downstream skills.');
+  console.error('  node publish-dataset-cli.mjs ./examples/data/audit.csv --lookup-column BYTECODE_HASH');
+  console.error('');
+  console.error('Required: PRIVATE_KEY env var (0x-prefixed Ethereum private key, funded with');
+  console.error('  SXT chain credits at https://chain.spaceandtime.io).');
+  console.error('');
+  console.error('--lookup-column pins which column downstream proof-plan + verify skills');
+  console.error('  treat as the membership-proof target. If omitted, downstream picks the');
+  console.error('  first VARCHAR column automatically.');
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -168,7 +182,7 @@ function submitTx(label, tx, signer, signerAddress, api) {
 
 async function main() {
   const args = parseArgs(process.argv);
-  if (args.help || !args.csvPath || !args.tableRef) {
+  if (args.help || !args.csvPath) {
     printUsage();
     process.exit(args.help ? 0 : 1);
   }
@@ -178,17 +192,54 @@ async function main() {
     console.error('✗ PRIVATE_KEY env var is not set.');
     console.error('');
     console.error('  Set a 0x-prefixed Ethereum private key for an account funded with');
-    console.error('  SxT testnet credits. Recommended: a fresh ETH key dedicated to SxT,');
-    console.error('  NOT your main MetaMask account.');
+    console.error('  SXT chain credits via https://chain.spaceandtime.io. Recommended: a');
+    console.error('  fresh ETH key dedicated to SxT, NOT your main MetaMask account.');
     console.error('');
     console.error('  Create a .env file in this directory:');
     console.error('    echo "PRIVATE_KEY=0xyour_ethereum_private_key" > .env');
     process.exit(1);
   }
 
-  const [prefix, table] = args.tableRef.split('.');
+  // Resolve PREFIX.TABLE. If the user provided it explicitly, use it as-is.
+  // Otherwise try to "remember" their previous prefix from .last-publish.json
+  // and derive the TABLE portion from the CSV filename — this is what makes
+  // subsequent publishes a one-liner for forked users.
+  let tableRef = args.tableRef;
+  let prefixSource = 'CLI arg';
+  if (!tableRef) {
+    const handoff = readLastPublish();
+    const rememberedPrefix = handoff?.tableRef ? extractPrefix(handoff.tableRef) : null;
+    if (!rememberedPrefix) {
+      console.error('✗ No PREFIX.TABLE provided and no prior publish to remember a prefix from.');
+      console.error('');
+      console.error('  First-time publishers must specify the namespace prefix explicitly so');
+      console.error('  the chain can auto-suffix it with your wallet hex. Example:');
+      console.error('');
+      console.error(`    node publish-dataset-cli.mjs ${args.csvPath} MY_PROJECT.MY_TABLE`);
+      console.error('');
+      console.error('  Pick any UPPERCASE_SNAKE_CASE prefix that scopes your project (e.g.');
+      console.error('  your org name or app name). After this first publish the prefix is');
+      console.error('  persisted to .last-publish.json — future publishes can omit it and the');
+      console.error('  CLI will reuse the same one automatically.');
+      process.exit(1);
+    }
+    // Derive the table portion from the CSV basename: `members.csv` → `MEMBERS`.
+    const csvStem = basename(args.csvPath).replace(/\.[^.]+$/, '');
+    const derivedTable = csvStem.toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+    tableRef = `${rememberedPrefix}.${derivedTable}`;
+    prefixSource = '.last-publish.json (remembered prefix)';
+    console.log(`▶ Reusing namespace prefix ${rememberedPrefix} from prior publish.`);
+    console.log(`  Derived table reference: ${tableRef}  [override by passing PREFIX.TABLE]`);
+    console.log('');
+  }
+
+  const [prefix, table] = tableRef.split('.');
   if (!prefix || !table) {
-    console.error(`✗ Table reference must be PREFIX.TABLE format. Got: "${args.tableRef}"`);
+    console.error(`✗ Table reference must be PREFIX.TABLE format. Got: "${tableRef}"`);
+    process.exit(1);
+  }
+  if (!/^[A-Z][A-Z0-9_]*$/.test(prefix) || !/^[A-Z][A-Z0-9_]*$/.test(table)) {
+    console.error(`✗ Table reference must use UPPERCASE_SNAKE_CASE on both sides of the dot. Got: "${tableRef}"`);
     process.exit(1);
   }
 
@@ -289,21 +340,46 @@ async function main() {
     },
   ]);
 
+  // Canonical SXT pattern: bundle createNamespace + createTables in a single
+  // utility.batchAll extrinsic. Mirrors the official docs:
+  //   chain.spaceandtime.io → Programmatic Table Creation tutorial
+  //   spaceandtimefdn/sxt-chain-examples → tutorials/create_hello_world_table
+  // This is what the working sxt_stakers → STAKERS publish used, and it
+  // succeeds in a single block when the namespace doesn't yet exist for this
+  // wallet (the first-publish case).
   const batchTx = api.tx.utility.batchAll([createNamespaceTx, createTablesTx]);
 
+  const isAlreadyExistsError = (err) =>
+    /VersionAlreadyExists|TableAlreadyExists|NamespaceAlreadyExists|already exists/i.test(
+      String(err?.message ?? err),
+    );
+
   console.log('');
-  console.log('▶ Submitting batched CREATE NAMESPACE + CREATE TABLE transaction...');
+  console.log('▶ Submitting batched CREATE NAMESPACE + CREATE TABLE (canonical SXT pattern)...');
   try {
     await submitTx('createTable batch', batchTx, signer, signer.address, api);
+    console.log(`  ✓ Namespace + table registered in single batch.`);
   } catch (err) {
-    // Idempotent: if the namespace/table already exists from a prior run,
-    // skip ahead to the insert step rather than aborting.
-    const msg = String(err?.message ?? err);
-    if (/VersionAlreadyExists|TableAlreadyExists|NamespaceAlreadyExists|already exists/i.test(msg)) {
-      console.log(`  ⚠ Skipping create: ${msg.split('\n')[0]}`);
-      console.log(`  Proceeding to insert against existing ${namespace}.${table}.`);
-    } else {
-      throw err;
+    if (!isAlreadyExistsError(err)) throw err;
+
+    // batchAll is atomic. If createNamespace fails (the namespace already
+    // exists from a prior publish under this wallet — the common case for any
+    // second-onward CSV upload), the whole batch rolls back, including the
+    // createTables call. The chain still has the namespace but the new table
+    // was NOT registered, so submitData would later fail with
+    // indexing.UnauthorizedSubmitter. Fall back to submitting createTables
+    // alone against the existing namespace.
+    console.log(`  ⚠ Namespace ${namespace} already exists — batchAll rolled back.`);
+    console.log(`  Re-submitting createTables alone against the existing namespace...`);
+    try {
+      await submitTx('createTables', createTablesTx, signer, signer.address, api);
+      console.log(`  ✓ Table ${namespace}.${table} registered in existing namespace.`);
+    } catch (err2) {
+      if (isAlreadyExistsError(err2)) {
+        console.log(`  ⚠ Table ${namespace}.${table} also already exists — proceeding to insert.`);
+      } else {
+        throw err2;
+      }
     }
   }
 
@@ -493,18 +569,56 @@ async function main() {
     ) + '\n',
   );
 
+  // Validate --lookup-column against the actual schema before persisting it,
+  // so a typo doesn't poison every downstream skill silently.
+  let lookupColumn = null;
+  if (args.lookupColumn) {
+    const upper = args.lookupColumn.toUpperCase();
+    const match = Object.keys(columnTypes).find((k) => k.toUpperCase() === upper);
+    if (!match) {
+      console.error('');
+      console.error(`✗ --lookup-column "${args.lookupColumn}" not in schema.`);
+      console.error(`  Available columns: ${Object.keys(columnTypes).join(', ')}`);
+      await api.disconnect();
+      process.exit(1);
+    }
+    lookupColumn = match;
+  }
+
+  // Cross-skill handoff. Downstream skills (save-proof-plans, verify-stakers,
+  // MCP run_proven_query) read this file as a fallback when their explicit
+  // env / args aren't set — so a forked user's next skill "just knows" which
+  // table, schema, and lookup column the last publish produced. The user's
+  // chosen namespace prefix is also recoverable from `tableRef` via
+  // `extractPrefix()`, which is how subsequent publishes auto-reuse it.
+  const handoffPath = writeLastPublish({
+    tableRef: `${namespace}.${table}`,
+    prefix,
+    csvPath: resolvePath(args.csvPath),
+    schemaPath: resolvePath(schemaOutPath),
+    lookupColumn,
+    wallet: wallet.address,
+    network: RPC,
+    publishedAt: new Date().toISOString(),
+  });
+
   console.log('');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log(`  ✅ Published ${rows.length} rows to ${namespace}.${table}`);
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('');
+  console.log(`  Namespace prefix: ${prefix}  [${prefixSource}]`);
   console.log(`  Inferred schema:  ${schemaOutPath}`);
+  console.log(`  Handoff written:  ${handoffPath}`);
+  if (lookupColumn) console.log(`  Lookup column:    ${lookupColumn} (pinned via --lookup-column)`);
   console.log('');
-  console.log('Verify with a proven SELECT (uses the SxT SDK, handles JWT exchange + /v1/zkquery flow):');
+  console.log('Next steps — these skills now auto-pick up this dataset:');
+  console.log('  • node save-proof-plans.mjs     # generate proof plans for this table');
+  console.log('  • node verify-stakers.mjs       # off-chain Proof of SQL via /v1/zkquery');
+  console.log(`  • node publish-dataset-cli.mjs <next.csv>   # reuses prefix "${prefix}" automatically`);
   console.log('');
-  console.log(`  SXT_TABLE=${namespace}.${table} \\`);
-  console.log(`  SXT_POINT_LOOKUP=<a value you know is in your data> \\`);
-  console.log(`    node examples/scripts/verify-stakers.mjs`);
+  console.log('Override the handoff per-run by setting SXT_TABLE / SXT_SCHEMA_PATH / SXT_LOOKUP_COLUMN,');
+  console.log('or pass a different PREFIX.TABLE to switch namespaces.');
   console.log('');
 
   await api.disconnect();

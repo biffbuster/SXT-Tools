@@ -71,23 +71,37 @@ One round trip on the user side, three API calls behind the scenes. Result rows 
 
 Required:
 
-- **Table reference**: full `<NAMESPACE>.<TABLE>` as it landed onchain — usually the form `MY_PROJECT_<UPPERCASE_HEX_ADDRESS>.MY_TABLE`. Get this from `dataset-publish` output, the chain.spaceandtime.io UI under "My Tables", or the `commitments.commitmentStorageMap` storage on the chain.
 - **User goal in plain English** — what they want to prove, e.g., "is wallet X in the table", "how many rows", "sum of amounts where status = active".
 - **`SXT_API_KEY`** in env — REST API key, separate from the publish wallet's private key. Get from chain.spaceandtime.io → Account → API keys.
 
+Conditionally required:
+
+- **Table reference**: full `<NAMESPACE>.<TABLE>` as it landed onchain — usually the form `MY_PROJECT_<UPPERCASE_HEX_ADDRESS>.MY_TABLE`. **Auto-picked up** from `examples/data/.last-publish.json` if the user just ran `dataset-publish` in the same local clone (per-user, gitignored). Otherwise: get it from `dataset-publish` output, the chain.spaceandtime.io UI under "My Tables", or `commitments.commitmentStorageMap`.
+
 Optional:
 
-- **`schema.json`** — if the user has the local schema file from publishing, use it instead of an API discovery call (saves a round trip).
+- **`schema.json`** — if the user has the local schema file from publishing, use it instead of an API discovery call (saves a round trip). The handoff file points at this path automatically.
+- **`SXT_LOOKUP_COLUMN`** — overrides which column membership / point-lookup queries filter on. Defaults to whatever the user pinned at publish time (`--lookup-column`), else the first VARCHAR in the schema.
 - **`SXT_API_BASE`** — defaults to `https://api.makeinfinite.dev`. Override if SXT moves the endpoint.
+
+### Auto-pickup from a recent publish
+
+The `dataset-publish` skill writes `examples/data/.last-publish.json` after a successful publish. The bundled CLI scripts (`save-proof-plans.mjs`, `verify-stakers.mjs`) read that file as a fallback for `SXT_TABLE` / `SXT_SCHEMA_PATH` / `SXT_LOOKUP_COLUMN`. The flow forked users see:
+
+1. Drop CSV → run `dataset-publish` → handoff file written
+2. Run this skill (or any downstream skill) → no need to retype table ref, schema path, or lookup column
+
+Resolution order: explicit env / arg → `.last-publish.json` → legacy canonical demo defaults. The handoff is per-local-clone — it contains the publisher's wallet hex and is gitignored, so each forked user's chain is isolated.
 
 ## Concrete execution recipe
 
 ### Step 1 — Establish the table schema
 
-Without the schema, you can't translate the goal into valid SQL. Two paths in priority order:
+Without the schema, you can't translate the goal into valid SQL. Resolution order:
 
-1. **Local `schema.json`** — if the user has one (typical right after `dataset-publish`), read it. Cheapest.
-2. **Ask the user** — if no local schema exists, ask the user to paste the schema or the publish output that includes the column list. The proven-query REST endpoint expects a fully-formed SQL string and won't help with discovery.
+1. **`examples/data/.last-publish.json` handoff** — written by `dataset-publish` and points at the inferred schema path + recorded `lookupColumn`. Read it first; this is the zero-friction path for forked users.
+2. **Local `schema.json`** — if the handoff is absent but the user has a hand-curated schema file from a prior publish, read it directly.
+3. **Ask the user** — if neither exists, ask the user to paste the schema or the publish output that includes the column list. The proven-query REST endpoint expects a fully-formed SQL string and won't help with discovery.
 
 If the table is in the dreamspace.xyz Studio under the user's account, the user can also see column names and types in the Studio table browser.
 
@@ -97,21 +111,24 @@ Walk the user's goal against the proven surface from `proof-of-sql-foundations`:
 
 | User goal pattern | Provable SQL shape |
 |---|---|
-| "Is X in the table?" | `SELECT <pk> FROM <t> WHERE <pk> = '<x>'` (membership) |
+| "Is X in the table?" | `SELECT <col> FROM <t> WHERE <col> = '<x>'` (membership; `<col>` is whichever column the publish step pinned via `--lookup-column`, default first VARCHAR) |
 | "How many rows?" | `SELECT COUNT(*) AS N FROM <t>` (cardinality) |
 | "How many match condition Y?" | `SELECT COUNT(*) AS N FROM <t> WHERE <y>` (filtered count) |
 | "Sum / total of column Z (for rows matching Y)?" | `SELECT SUM(<z>) AS TOTAL FROM <t> [WHERE <y>]` |
 | "What rows match condition Y?" | `SELECT <cols> FROM <t> WHERE <y>` (point or range) |
-| "Group rows by column G and count" | `SELECT <g>, COUNT(*) AS N FROM <t> GROUP BY <g>` |
-| "Join with another published table on key K" | `SELECT … FROM <t1> JOIN <t2> ON <t1>.<k> = <t2>.<k> WHERE …` (single-chain only) |
+| "Group rows by column G and count" | `SELECT <g>, COUNT(*) AS N FROM <t> GROUP BY <g>` (one GROUP BY column) |
+| "First N rows (paginated read, unsorted)" | `SELECT <cols> FROM <t> [WHERE <y>] LIMIT <n> [OFFSET <m>]` |
 
 **Refuse and offer rewrite for any goal that needs:**
 
-- Top-N / sort: `ORDER BY` + `LIMIT` are not provable. Counter-offer: bound the set with `WHERE`, return all matches, sort client-side.
-- Averages, mins, maxes: `AVG`/`MIN`/`MAX` not provable. Counter-offer: return `SUM` + `COUNT` (compute average client-side) or full filtered set within the 10k row cap.
-- Distinct counts: `DISTINCT` not provable. Counter-offer: ask the user if they can pre-deduplicate at publish time, or run unproven if exploratory.
-- Subqueries / CTEs / window functions / `UNION` / `HAVING` / division: not on the proven surface. Counter-offer: split into multiple proven queries that compose client-side.
-- Cross-chain joins: not provable. Counter-offer: query each chain's table separately, join in application code.
+- **JOINs**: not provable on the current SXT Proof of SQL surface. Counter-offer: query each table separately, join in application code (or in the Solidity callback if both proofs land on-chain).
+- **Sorted Top-N**: `ORDER BY` is not provable, so true "top N by value" isn't possible inside a proof. `LIMIT` *alone* IS provable, so paginated reads work — but the rows come back in whatever order the engine produces. Counter-offer: pull the full filtered set (within the 10k row cap), sort client-side.
+- **Averages, mins, maxes**: `AVG`/`MIN`/`MAX` not provable. Counter-offer: return `SUM` + `COUNT` (compute average client-side) or full filtered set within the 10k row cap.
+- **Distinct counts**: `DISTINCT` not provable. Counter-offer: ask the user if they can pre-deduplicate at publish time, or run unproven if exploratory.
+- **Subqueries / CTEs / window functions / `UNION` / `HAVING` / division**: not on the proven surface. Counter-offer: split into multiple proven queries that compose client-side.
+- **Cross-chain joins**: not provable. Counter-offer: query each chain's table separately, join in application code.
+
+Authoritative surface reference: https://docs.spaceandtime.io/docs/posql-sql-syntax-supported-operations
 
 ### Step 3 — Execute via REST API with proof
 
@@ -191,7 +208,7 @@ Response field reference:
 |---|---|---|
 | 401 | `Invalid JWT` | You sent the raw `SXT_API_KEY` as Bearer, or your JWT expired (25-min lifetime). Re-run step 1. |
 | 422 | `does not exist in source network MAINNET` | The table didn't get promoted into the dreamspace MAINNET catalog. Most often caused by a `PRIMARY KEY` clause in the original `CREATE TABLE` — see `dreamspace-data:dataset-publish`. |
-| 400 | `source network 'X' is not supported` | You passed something other than the literal `"MAINNET"`. There is no other accepted enum value, even for user-uploaded Managed tables. |
+| 400 | `source network 'X' is not supported` | You passed something other than the literal `"MAINNET"`. There is no other accepted enum value, even for user-published Community-tier tables. |
 | 422 | other | Surface the body verbatim — the prover names the offending field. |
 
 If you see the 422 "does not exist in source network MAINNET" error against a table you know was published successfully, run the off-chain pre-flight in `examples/scripts/verify-stakers.mjs` for a clean reproduction; the resolution is almost always to republish the table without a PRIMARY KEY clause in the DDL.

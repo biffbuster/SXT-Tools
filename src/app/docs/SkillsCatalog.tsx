@@ -10,6 +10,10 @@ export type SkillCard = {
   highlights: string[];
   languages: string[];
   githubUrl: string;
+  // "stable" — ready to invoke today. "coming-soon" — scaffolded on the
+  // catalog so the roadmap is honest; SKILL.md documents the current
+  // workaround (typically a UI flow) until the CLI implementation ships.
+  status?: "stable" | "coming-soon";
 };
 
 const FILTERS = [
@@ -71,10 +75,21 @@ export default function SkillsCatalog({ skills }: { skills: SkillCard[] }) {
 
       <div className="skills-card-grid">
         {visible.map((s) => (
-          <article key={s.name} className="skills-card" id={`skill-${s.name}`}>
+          <article
+            key={s.name}
+            className={`skills-card ${s.status === "coming-soon" ? "skills-card-coming-soon" : ""}`}
+            id={`skill-${s.name}`}
+          >
             <header className="skills-card-header">
               <div className="skills-card-title-block">
-                <h3 className="skills-card-title">{s.name}</h3>
+                <h3 className="skills-card-title">
+                  {s.name}
+                  {s.status === "coming-soon" && (
+                    <span className="skills-card-status-badge" aria-label="Coming soon">
+                      🚧 Coming soon
+                    </span>
+                  )}
+                </h3>
                 <div className="skills-card-subpath">
                   {s.plugin}/{s.name}
                 </div>

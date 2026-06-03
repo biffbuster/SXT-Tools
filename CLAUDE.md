@@ -1,6 +1,6 @@
 # CLAUDE.md — agent operating instructions for this repo
 
-You are Claude Code working inside the **sxt-tools** repository: a Claude Code marketplace shipping three plugins (`dreamspace-data`, `dreamspace-query`, `dreamspace-contracts`) and five skills that take a CSV from a local folder to a verifiable Proof-of-SQL event on Base mainnet via Space and Time chain.
+You are Claude Code working inside the **sxt-tools** repository: a Claude Code marketplace shipping three plugins (`dreamspace-data`, `dreamspace-query`, `dreamspace-contracts`) and six skills that take a CSV (or SXT-indexed Ethereum chain data) from a local folder to a verifiable Proof-of-SQL event on Base mainnet via Space and Time chain.
 
 This file captures the load-bearing rules for working *inside* this codebase. The human-facing documentation is in [`README.md`](./README.md) (overview/quickstart) and [`HOW_IT_WORKS.md`](./HOW_IT_WORKS.md) (architecture). Read those before responding to onboarding questions; read this file before *modifying* anything.
 
@@ -52,7 +52,7 @@ A user's CSV is published to SXT chain via two Substrate extrinsics (`tables.cre
 
 ### Branding & content
 - The repo brand is **`sxt-tools`** (the marketplace handle). Plugins are `dreamspace-data` / `dreamspace-query` / `dreamspace-contracts` (legacy slug). Don't introduce "Space and Time AI" or "spaceandtime-*" plugin names — those refer to a different/aspirational product.
-- **The five real skills are:** `dataset-publish`, `proof-of-sql-foundations`, `run-proven-query`, `deploy-contract`, `pre-deploy-audit`. Phantom skills referenced in old drafts (`verified-analytics`, `cross-chain-join`, `deploy-erc`, `post-deploy-monitor`, `biscuit-mint`, `queryrouter-call`) **do not exist** — don't reference them in new content.
+- **The six real skills are:** `dataset-publish`, `proof-of-sql-foundations`, `run-proven-query`, `chain-data-query`, `deploy-contract`, `pre-deploy-audit`. Phantom skills referenced in old drafts (`verified-analytics`, `cross-chain-join`, `deploy-erc`, `post-deploy-monitor`, `biscuit-mint`, `queryrouter-call`) **do not exist** — don't reference them in new content.
 - **Don't reference biscuit tokens.** The `dataset-publish` skill does not mint them; the publish flow is just `tables.createTables` + `indexing.submitData`.
 - **Don't add new pages under `src/app/docs/`.** The trimmed structure is intentional. The five pages there (`/docs`, `/docs/quick-start`, `/docs/space-and-time`, `/docs/generate-audit-deploy`, `/docs/mcp`) are the canonical docs site.
 - **`/docs/mcp` is the MCP integration spec** — config blocks for Claude Desktop / Cursor, the five `sxt.*` MCP tool definitions that map 1:1 to the shipped skills, env-var auth (`SXT_PRIVATE_KEY` + `MAKEINFINITE_API_KEY`), stdio + HTTP transport options, and a troubleshooting table. The page is honest about pre-release state via a callout banner — the actual MCP server (`packages/mcp/sxt-mcp/`) is not yet implemented; the page is the build target. When the server lands, update the status banner and the install snippet (`claude mcp install @biffbuster/sxt`) — keep tool names / arg shapes in sync with the implementation.

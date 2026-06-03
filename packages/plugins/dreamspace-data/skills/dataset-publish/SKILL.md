@@ -24,20 +24,54 @@ This skill is the upstream half of the DreamSpace audit loop. The downstream ski
 You need:
 
 - **Data file path or inline data** — CSV, Parquet, or a JSON array of objects.
-- **Schema and table name** — e.g., `MY_AUDIT.KNOWN_EXPLOITS`. Use `UPPERCASE_SNAKE_CASE`. The schema half is the namespace (lowercase letters + digits, starts with a letter); the table half is the name within that namespace.
-- **Column types** — one of `BOOLEAN`, `BIGINT`, `VARCHAR`, `DECIMAL75`, `TIMESTAMP`. Anything outside this list cannot carry a Proof of SQL query (see the `proof-of-sql-foundations` skill).
-- **Primary key column** — required. Must be `NOT NULL` and unique per row.
-- **Access mode** (the chain calls this `tableType`) — must be one of the values in the runtime's `SxtCoreTablesTableType` enum. As of the SXT mainnet runtime queried via `wss://rpc.mainnet.sxt.network`, the accepted values are:
-  - `Community` — open writes (default; suitable for public reference datasets that the community curates together).
-  - `PublicPermissionless` — public-readable, write-permissionless variant.
-  - `CoreBlockchain` — reserved for chain-indexed contract event tables.
-  - `SCI` — reserved for Smart Contract Indexing tables.
-  - `Testing` — for non-production experimentation. Takes an `InsertQuorumSize` argument.
-  - **Do not pass `OwnerPermissioned` or `UserVerified`** — these names appear in older SXT marketing material but are not valid on the current runtime and will fail with `Cannot map Enum JSON, unable to find 'OwnerPermissioned'`. If you need owner-only writes, achieve that by holding the only key permitted to call `indexing.submitData` on the table; the chain enforces that via signer identity, not via the `tableType` enum.
+- **Namespace prefix + table name** — both `UPPERCASE_SNAKE_CASE`, separated by a dot (e.g. `<YOUR_PROJECT>.VALIDATORS`). The prefix is **user-chosen** — it should scope the user's project (org name, app name, etc.) and is **NOT** something the skill picks unilaterally. See the "Pick a namespace prefix" decision flow below. The chain auto-appends the publishing wallet's uppercase hex address to the prefix, so `MY_PROJECT.VALIDATORS` becomes `MY_PROJECT_<40_HEX>.VALIDATORS` onchain — different forked users with different wallets never collide even if they pick the same prefix.
+- **Column types** — one of `BOOLEAN`, `BIGINT`, `VARCHAR`, `DECIMAL75`, `TIMESTAMP` (plus `BINARY` and the smaller int variants). Anything outside this list cannot carry a Proof of SQL query (see the `proof-of-sql-foundations` skill).
+- **NEVER emit a `PRIMARY KEY` clause.** SXT chain accepts PK-bearing DDL and rows ingest, but the dreamspace MAINNET indexer **silently** skips promoting the table into its catalog. Off-chain `/v1/zkquery` then returns `422 "does not exist in source network MAINNET"`, and the on-chain executor silently drops `query()` calls until the 1-hour timeout (100 SXT locked). The canonical SXT `create_hello_world_table` tutorial omits PK entirely; Proof of SQL determinism is satisfied by `NOT NULL` alone. Verified failure mode that cost 200 SXT before being traced.
+- **Lookup column for downstream proofs** (optional, recommended) — pick the column you want `pre-deploy-audit` and `run-proven-query` to filter on for membership proofs (`WHERE <col> = '<value>'`). Pass it to `publish-dataset-cli.mjs` via `--lookup-column NAME` so the choice is validated against the schema and persisted into the cross-skill handoff (`.last-publish.json`). If you don't pass it, downstream auto-picks the first VARCHAR column.
+- **Access mode** (the chain calls this `tableType`) — **use `Community` (the default)**. It's the only enum value that accepts `indexing.submitData` end-to-end from a normal funded account, and it's what the entire pipeline below assumes. Verified on mainnet.
+  - The runtime *also* exposes `PublicPermissionless`, `CoreBlockchain`, `SCI`, and `Testing`, but those route through privileged quorum / require permission grants from SXT (`IndexingPallet.SubmitDataForPrivilegedQuorum`) and will fail with `BadOrigin` on insert for normal users.
+  - **Do not pass `OwnerPermissioned` or `UserVerified`** — these names appear in older SXT marketing material but are not valid on the current runtime and fail with `Cannot map Enum JSON, unable to find 'OwnerPermissioned'`. If you need owner-only writes, hold the only key permitted to sign `indexing.submitData` — the chain enforces this via signer identity, not via the `tableType` enum.
 
   Always probe the live enum before generating values for an agent: `api.createType('SxtCoreTablesTableType').defKeys` returns the current set.
 
 You also need a wallet that has compute credits funded at https://chain.spaceandtime.io. Credits are funded with SXT, WETH, USDC, or USDT — the exact amount needed depends on payload size and is shown in the wallet flow.
+
+## Pick a namespace prefix
+
+**This is one of two human decisions the skill should ask about** (the other is the schema proposal). Do not silently invent a prefix.
+
+The decision flow:
+
+1. **Check `examples/data/.last-publish.json`** — if it exists, the user has published before from this clone. Extract the prefix from `tableRef` by stripping the trailing `_<40_hex>.<TABLE>` suffix (or read the persisted `prefix` field if present). **Propose reusing it** so the user's tables stay grouped under one namespace:
+
+   > "Your prior publish used the namespace prefix `BIFF_DATA`. Re-use it for this dataset? (Yes → I'll publish as `BIFF_DATA.<DATASET>`; No → tell me a new prefix.)"
+
+2. **First-ever publish** (no handoff file) — ask the user explicitly:
+
+   > "What namespace prefix would you like to use? It should scope your project — your org name, app name, or anything `UPPERCASE_SNAKE_CASE`. For example: `ACME_PROJECT`, `MY_AUDIT`, `MEMBERSHIP_V1`. The chain will auto-append your wallet hex so it never collides with anyone else's namespace."
+
+   If they hesitate, propose one derived from their project context (the repo name, the CSV's apparent domain, etc.) — but get explicit confirmation before publishing.
+
+3. **The table portion** (after the dot) defaults to the CSV's filename in UPPERCASE_SNAKE_CASE (`validators.csv` → `VALIDATORS`). The CLI will derive this automatically when only the CSV is passed without an explicit `PREFIX.TABLE`.
+
+4. **The wallet hex suffix is automatic** — never let the user (or the skill) construct the hex-suffixed namespace by hand. The CLI computes it from `PRIVATE_KEY` at publish time. The chain enforces that the namespace ends with the signing wallet's uppercase hex; mismatched prefixes are rejected.
+
+### How the CLI applies these choices
+
+```bash
+# First publish — user provides PREFIX.TABLE explicitly:
+node publish-dataset-cli.mjs ./data/validators.csv ACME_PROJECT.VALIDATORS --lookup-column ID
+
+# Subsequent publish — omit PREFIX.TABLE. The CLI reads .last-publish.json,
+# reuses the remembered prefix, and derives the table name from the CSV stem:
+node publish-dataset-cli.mjs ./data/members.csv
+# → publishes as ACME_PROJECT.MEMBERS
+
+# Switch to a new namespace mid-project — pass a different PREFIX.TABLE explicitly:
+node publish-dataset-cli.mjs ./data/audit.csv ACME_AUDIT.SIGNATURES
+```
+
+The cross-skill handoff (`.last-publish.json`) carries the full table reference *and* the prefix portion separately, so every downstream skill (`run-proven-query`, `save-proof-plans`, `verify-stakers`, `render-onchain-query`) auto-picks up whichever dataset was published most recently — no env-var copy-paste between steps.
 
 ## Schema design — when the user has no `schema.json`
 
@@ -45,8 +79,8 @@ Most users will hand you a CSV with no schema file. Don't stop and ask them to w
 
 1. **Read the first ~100 rows** of the CSV with the Read tool. That's enough to type-infer reliably without loading the full file.
 2. **Per column, propose a SQL type** using the rules below. Show the user the proposal as a table before writing the file.
-3. **Pick a primary key candidate** by counting distinct values across the sample. The column with the highest cardinality (closest to 100% unique) and zero nulls is the right default. If two columns tie, pick the one whose name is more identifier-like (`id`, `address`, `hash`, `wallet`).
-4. **Confirm the proposal** with the user in one message. Show types + primary key + one example row, ask "Look right?" Don't write the file or run the publish until they say yes.
+3. **Pick a lookup-column candidate** by counting distinct values across the sample. The column with the highest cardinality (closest to 100% unique) and zero nulls is the right default for membership-proof queries. If two columns tie, pick the one whose name is more identifier-like (`id`, `address`, `hash`, `wallet`). This column gets passed to `publish-dataset-cli.mjs` via `--lookup-column NAME` and persisted into the `.last-publish.json` handoff so every downstream skill picks it up automatically. **Do not emit a `PRIMARY KEY` clause** — the chain accepts it but the indexer silently skips PK-bearing tables.
+4. **Confirm the proposal** with the user in one message. Show types + lookup column + one example row, ask "Look right?" Don't write the file or run the publish until they say yes.
 5. **Write `<csv-name>.schema.json`** next to the CSV with the agreed shape and proceed.
 
 ### Type judgment for ambiguous columns
@@ -90,11 +124,13 @@ Proposed schema for validators.csv:
 | FIRST_SEEN        | TIMESTAMP       | ISO-8601, millisecond precision    |
 | IS_SLASHED        | BOOLEAN         | normalized true/false              |
 
-Primary key: VALIDATOR_ID (100% unique, no nulls in sample)
-Effective table reference: MY_VALIDATORS_<YOUR_ADDRESS>.VALIDATORS
+Lookup column: VALIDATOR_ID (100% unique, no nulls in sample) — will be passed via --lookup-column
+Namespace prefix: <ASK_THE_USER — e.g. ACME_PROJECT> (chain auto-appends your wallet hex)
+Effective table reference: <PREFIX>_<YOUR_WALLET_HEX>.VALIDATORS
 Access mode: Community (public reads + writes — confirm before mainnet)
+DDL: NOT NULL on every column, no PRIMARY KEY (chain indexer silently skips PK-bearing tables)
 
-Confirm and I'll write the schema.json and run the publish.
+Confirm the prefix + schema + lookup column and I'll write the schema.json and run the publish.
 ```
 
 This is the conversation pattern. Don't skip the confirmation step — schema decisions are committed onchain at publish time and can't be altered without dropping and re-creating the table.
@@ -137,23 +173,44 @@ A working Node.js script ships at `examples/scripts/publish-dataset-cli.mjs` in 
 **Run the publish**:
 
 ```bash
+# First publish — explicit prefix (replace ACME_PROJECT with the user's chosen prefix).
 node examples/scripts/publish-dataset-cli.mjs \
   ./examples/data/known-exploits-sample.csv \
-  MY_AUDIT.KNOWN_EXPLOITS \
-  --schema ./examples/data/known-exploits-sample.schema.json
+  ACME_PROJECT.KNOWN_EXPLOITS \
+  --schema ./examples/data/known-exploits-sample.schema.json \
+  --lookup-column BYTECODE_HASH   # optional — pins the membership-proof column for downstream skills
+
+# Subsequent publish (after .last-publish.json exists) — prefix is remembered, table portion
+# is derived from the CSV stem. The agent should still confirm "use the remembered prefix?" first.
+node examples/scripts/publish-dataset-cli.mjs ./examples/data/drainers.csv --lookup-column ADDRESS
+# → publishes as ACME_PROJECT.DRAINERS
 ```
+
+### Cross-skill handoff (the "active dataset" mechanism)
+
+After a successful publish, the CLI writes `examples/data/.last-publish.json` capturing `{tableRef, prefix, csvPath, schemaPath, lookupColumn, wallet, publishedAt}`. **This is the contract that lets every downstream CLI skill pick up the dataset the user just published with zero configuration** — `save-proof-plans.mjs`, `verify-stakers.mjs`, and `render-onchain-query.mjs` read it as a fallback when their explicit env vars aren't set. The persisted `prefix` field is also what makes the *next* publish a one-liner (the CLI reuses it; the user doesn't retype it).
+
+The handoff file is **per-local-clone and gitignored** (it contains the publisher's wallet hex). Each forked user gets their own publish → auto-pickup chain without leaking wallet identity into PRs.
+
+Resolution order downstream:
+
+1. Explicit env / arg (e.g. `SXT_TABLE`, `SXT_LOOKUP_COLUMN`, `--tableRef`)
+2. `.last-publish.json`
+3. Legacy canonical-demo defaults (so the bundled STAKERS demo still works with zero env)
+
+If the user passes `--lookup-column NAME` at publish time, the column is validated against the schema before any chain spend and persisted into the handoff. If omitted, downstream picks the first VARCHAR column automatically and the user can override per-run with `SXT_LOOKUP_COLUMN`.
 
 The script:
 
 1. Reads the CSV and schema.
-2. Connects to the RPC in `SXT_RPC` env var. **Default is `wss://rpc.testnet.sxt.network` (CLI default); the chain.spaceandtime.io UI and the official "Programmatic Data Insertion" docs use `wss://rpc.mainnet.sxt.network`.** Funded credits land on whichever chain the funding flow targeted — usually mainnet, since the UI defaults there. Override with `SXT_RPC=wss://rpc.mainnet.sxt.network` per run when you want to publish to mainnet.
+2. Connects to the RPC in `SXT_RPC` env var. **Default is `wss://rpc.mainnet.sxt.network`** — matches the canonical `spaceandtimefdn/sxt-chain-examples` tutorial and the chain.spaceandtime.io UI. Override with `SXT_RPC=wss://rpc.testnet.sxt.network` for testnet (separate credit balance; rarely used since the funding UI defaults to mainnet too).
 3. Builds the namespace per chain rule: `<PREFIX>_<UPPERCASE_HEX_ADDRESS>` (auto-derived from your wallet).
-4. Renders `NOT NULL` on every column (chain rule for Proof of SQL determinism).
+4. Renders `NOT NULL` on every column (chain rule for Proof of SQL determinism). **No `PRIMARY KEY` clause** — see the load-bearing rule under Inputs above.
 5. Wraps the ethers Wallet with `EthEcdsaSigner`.
-6. Submits a batched transaction: `createNamespace` + `createTables`. **Idempotent on re-run** — if the runtime returns `tables.VersionAlreadyExists`, the script logs and proceeds straight to the insert step rather than aborting.
+6. Submits a batched transaction: `utility.batchAll([createNamespace, createTables])`. **Idempotent on re-run** — `batchAll` is atomic, so on second-publish-per-wallet (namespace already exists) the script catches the rollback and falls back to submitting `createTables` alone against the existing namespace.
 7. Encodes rows as Apache Arrow IPC with **explicitly typed vectors** built from the schema (`vectorFromArray(values, new Utf8())` etc.). Implicit typing via `tableFromJSON` produces messages the runtime rejects with `indexing.ArrowExpectedRecordBatchMessage`.
 8. Submits the insert via **`api.tx.indexing.submitData({namespace, name}, batchId, ipcHex)`** — *not* `api.tx.tables.*`. The insert extrinsic lives on the `indexing` pallet per the official chain.spaceandtime.io "Programmatic Data Insertion" docs.
-9. Prints finalized block hashes for both the create batch and the insert.
+9. Writes the inferred schema next to the CSV (`<csv-base>.inferred-schema.json`) AND the cross-skill handoff (`examples/data/.last-publish.json`), then prints finalized block hashes.
 
 ### Key chain rules to remember
 
@@ -194,10 +251,13 @@ const createNs = api.tx.tables.createNamespace(
 );
 const createTbl = api.tx.tables.createTables([{
   ident: { namespace, name: table },
+  // NOTE: NOT NULL on every column. NO PRIMARY KEY clause — the chain
+  // accepts PK-bearing DDL but the dreamspace MAINNET indexer silently
+  // skips promoting PK-bearing tables, which breaks /v1/zkquery + on-chain
+  // executors downstream. Verified failure mode — see the Inputs section.
   createStatement: `CREATE TABLE ${namespace}.${table} (
     BYTECODE_HASH VARCHAR NOT NULL,
-    EXPLOIT_TYPE VARCHAR NOT NULL,
-    PRIMARY KEY (BYTECODE_HASH)
+    EXPLOIT_TYPE VARCHAR NOT NULL
   )`,
   tableType: 'Community',
   commitment: { Empty: { hyperKzg: true } },
@@ -245,26 +305,29 @@ FROM MY_AUDIT.KNOWN_EXPLOITS
 
 Run this through the SXT prover at `https://api.makeinfinite.dev/v1/zkquery`. The raw `SXT_API_KEY` is not a Bearer token; exchange it for a 25-minute JWT at `https://proxy.api.makeinfinite.dev/auth/apikey` first. The `sxt-proof-of-sql-sdk` package handles the exchange, submit, poll, and verify flow in one call. The canonical implementation lives in `examples/scripts/verify-stakers.mjs`. If the SDK returns a verified row count that matches what you uploaded, the table is committed and ready for downstream skills.
 
+Or simpler: just run `node examples/scripts/verify-stakers.mjs` with no arguments — it reads `.last-publish.json` and runs the cardinality + point-lookup proofs against whatever was just published.
+
 ## Common datasets worth publishing
 
-The skill is most useful when paired with reference data that downstream audit workflows need:
+The skill is most useful when paired with reference data that downstream audit workflows need. Replace `<PREFIX>` with whatever the user picked (or what `.last-publish.json` already remembers):
 
 | Dataset | Schema/Table | What downstream consumes it |
 |---|---|---|
-| Known-exploit bytecode signatures | `MY_AUDIT.KNOWN_EXPLOITS (bytecode_hash, exploit_type, severity, source_url)` | `pre-deploy-audit` cross-references to flag vulnerable patterns |
-| Trusted deployer allowlist | `MY_AUDIT.TRUSTED_DEPLOYERS (address, label, source)` | `pre-deploy-audit` reduces false positives on known-good deployers |
-| Drainer wallet denylist | `MY_AUDIT.DRAINER_WALLETS (address, first_seen, evidence_url)` | Pre-integration checks before allowing a contract to receive `setApprovalForAll` |
-| Token metadata | `MY_APP.TOKEN_METADATA (address, name, ticker, logo_url, verified_at)` | UI / agent metadata enrichment |
+| Known-exploit bytecode signatures | `<PREFIX>.KNOWN_EXPLOITS (bytecode_hash, exploit_type, severity, source_url)` | `pre-deploy-audit` cross-references to flag vulnerable patterns |
+| Trusted deployer allowlist | `<PREFIX>.TRUSTED_DEPLOYERS (address, label, source)` | `pre-deploy-audit` reduces false positives on known-good deployers |
+| Drainer wallet denylist | `<PREFIX>.DRAINER_WALLETS (address, first_seen, evidence_url)` | Pre-integration checks before allowing a contract to receive `setApprovalForAll` |
+| Token metadata | `<PREFIX>.TOKEN_METADATA (address, name, ticker, logo_url, verified_at)` | UI / agent metadata enrichment |
 
 For audit-specific reference data, consider seeding from public sources like Forta alerts, Rekt News bytecode signatures, or community-maintained Etherscan tags. Always cite the source URL in the row so the audit report can attribute findings.
 
 ## Hard constraints
 
-- **Column types are limited to** `BOOLEAN`, `BIGINT`, `VARCHAR`, `DECIMAL75`, `TIMESTAMP`. Don't promise the user we support `JSON`, `BLOB`, or other types — they will silently break Proof of SQL on subsequent queries.
+- **Column types are limited to** `BOOLEAN`, `BIGINT`, `VARCHAR`, `DECIMAL75`, `TIMESTAMP` (plus `BINARY`, `TINYINT`, `SMALLINT`, `INT`). Don't promise the user we support `JSON`, `BLOB`, or other types — they will silently break Proof of SQL on subsequent queries.
 - **Schema names** must be lowercase letters and digits, starting with a letter. Table names within a schema use `UPPERCASE_SNAKE_CASE`.
-- **Primary key is required** and must be `NOT NULL`.
+- **All columns must be `NOT NULL`.** Proof of SQL needs deterministic data, no null branches.
+- **No `PRIMARY KEY` clause** — silently breaks catalog promotion (see Inputs above).
 - **Compute credits are required** to publish. If the wallet hasn't funded credits at chain.spaceandtime.io, stop and direct the user there before attempting the publish.
-- **CLI default vs UI default differ.** The `publish-dataset-cli.mjs` script defaults to `wss://rpc.testnet.sxt.network`. The chain.spaceandtime.io UI defaults to `wss://rpc.mainnet.sxt.network`, and that's also what the official "Programmatic Data Insertion" docs use. Funded compute credits land on whichever chain the funding flow targeted — almost always mainnet in practice. Always confirm with the user which chain to target before publishing, and surface the override (`SXT_RPC=wss://rpc.mainnet.sxt.network`) when mainnet is intended. Mainnet table commitments are permanent; only insert public, non-PII data.
+- **Default RPC is mainnet.** Both `publish-dataset-cli.mjs` and the chain.spaceandtime.io UI default to `wss://rpc.mainnet.sxt.network`. Testnet (`wss://rpc.testnet.sxt.network`) has a separate credit balance and is opt-in via `SXT_RPC` env override. Mainnet table commitments are permanent — only insert public, non-PII data.
 
 ## When to refuse
 

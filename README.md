@@ -22,7 +22,7 @@ Two distribution channels, both working. The seamless experience lives in the pl
 
 ### 1. Plugin marketplace (the seamless path)
 
-Three plugins for Claude Code. Five skills total. The format is portable Markdown, so any agent that reads `SKILL.md` files can run the workflows. Cursor support via Skills CLI; additional agent integrations in scope for follow-on releases.
+Three plugins for Claude Code. Six skills total. The format is portable Markdown, so any agent that reads `SKILL.md` files can run the workflows. Cursor support via Skills CLI; additional agent integrations in scope for follow-on releases.
 
 ```
 /plugin marketplace add biffbuster/sxt-tools
@@ -34,7 +34,7 @@ Three plugins for Claude Code. Five skills total. The format is portable Markdow
 | Plugin | Skills | What it covers |
 |---|---|---|
 | `dreamspace-data` | `dataset-publish` | Publish a CSV as a chain-secured SXT table |
-| `dreamspace-query` | `proof-of-sql-foundations`, `run-proven-query` | Generate provable SQL and execute it for a HyperKZG proof |
+| `dreamspace-query` | `proof-of-sql-foundations`, `run-proven-query`, `chain-data-query` | Generate provable SQL (against your own table or SXT-indexed Ethereum data) and execute it for a HyperKZG proof |
 | `dreamspace-contracts` | `pre-deploy-audit`, `deploy-contract` | Audit and deploy the proof-consuming Solidity |
 
 Setup once: install the plugin, paste `SXT_API_KEY` into the host config. Ask Claude a question against the canonical demo table and a HyperKZG proof comes back in roughly three seconds.
@@ -217,43 +217,75 @@ Both smoke scripts are zero-cost protocol exercises against the running server. 
 
 ## Use a different CSV
 
-Same scripts, different inputs. SXT auto-suffixes the namespace with the publishing wallet's address, so the published table reference, proof plan bytes, and rendered contract bytecode all differ per wallet.
+Same scripts, different inputs. **Zero env-var retyping between steps** — every step after `publish` auto-picks up the active dataset via a cross-skill handoff file. The namespace prefix you pick on first publish is remembered for subsequent publishes too.
+
+### First publish — pick a namespace prefix
+
+Pick any `UPPERCASE_SNAKE_CASE` prefix that scopes your project (`ACME_PROJECT`, `MEMBERSHIP_V1`, etc.). The chain auto-appends your wallet hex so prefixes never collide across forks — every forked user effectively gets their own private namespace under the prefix they chose.
 
 ```bash
-# 1. Publish your CSV
 node publish-dataset-cli.mjs \
   ../data/your-data.csv \
-  YOUR_NAMESPACE.YOUR_TABLE \
-  --schema ../data/your-schema.json
+  <YOUR_PROJECT>.<YOUR_TABLE> \
+  --lookup-column <YOUR_LOOKUP_COL>     # optional — pins the membership-proof column
+```
 
-# 2. Set in .env:
-#    SXT_TABLE=YOUR_NAMESPACE_<UPPERCASE_HEX_ADDRESS>.YOUR_TABLE
-#    SXT_POINT_LOOKUP=0x<an address you know is in your data>
+`<YOUR_PROJECT>` is yours to choose. `<YOUR_TABLE>` is `UPPERCASE_SNAKE_CASE` for the dataset (e.g. `VALIDATORS`).
 
-# 3. Generate proof plans
+### Subsequent steps — zero arguments
+
+Each script reads `examples/data/.last-publish.json` (written by step 1) to discover the table reference, schema path, lookup column, and the prefix to keep using.
+
+```bash
+# 2. Generate proof plans (writes to proof-plans/<table-slug>/)
 node save-proof-plans.mjs
 
-# 4. Render a typed contract for your column projection
-node render-onchain-query.mjs \
-  --plan ../data/proof-plans/point-lookup.json \
-  --schema ../data/your-schema.json \
-  --name MyQuery
+# 3. Off-chain pre-flight — verifies the HyperKZG proof locally in ~1s.
+#    Free apart from one API quota tick. ALWAYS run this before step 5.
+node verify-stakers.mjs
 
-# 5. Build, deploy, query
+# 4. Render a typed Solidity contract for your column projection.
+node render-onchain-query.mjs --name MyQuery
+
+# 5. Build, deploy, query (the on-chain climax — costs ~$0.50 ETH + 100 SXT)
 cd ../contracts/sxt-onchain-query && forge build && cd ../../scripts
 node deploy-onchain-query.mjs
 node query-onchain.mjs
 ```
 
-The renderer maps SQL types (`VARCHAR`, `BIGINT`, `BOOLEAN`, `TIMESTAMP`, `INT`, `BINARY`, `TINYINT`, `SMALLINT`) to the appropriate `ProofOfSqlTable` reader and emits a `QueryRow` event with one parameter per projected column.
+### Subsequent publishes — prefix is remembered
 
-Before spending 100 SXT on the on-chain `query()`, run the off-chain pre-flight:
+When you publish a *second* CSV from the same clone, you don't need to retype the prefix. The CLI reads the handoff and reuses what you picked the first time. The table portion is auto-derived from the CSV filename:
 
 ```bash
-node verify-stakers.mjs   # uses SXT_API_KEY and SXT_TABLE from .env
+# .last-publish.json already records prefix "ACME_PROJECT" from the first run.
+node publish-dataset-cli.mjs ../data/drainers.csv --lookup-column ADDRESS
+# → publishes as ACME_PROJECT.DRAINERS
 ```
 
-A successful response (HyperKZG proof returned in roughly one second) means the on-chain `query()` is mathematically guaranteed to fulfill. They share a prover backend. A 422 *"does not exist in source network MAINNET"* means the table is not promoted yet. Most often that is a `PRIMARY KEY` clause in the original DDL. See Troubleshooting.
+Switch to a different namespace mid-project by passing a fresh `PREFIX.TABLE` explicitly. Override any handoff field per-run via `SXT_TABLE` / `SXT_SCHEMA_PATH` / `SXT_LOOKUP_COLUMN` / `SXT_POINT_LOOKUP`.
+
+A successful `verify-stakers.mjs` response (HyperKZG proof returned in ~1s) means the on-chain `query()` is mathematically guaranteed to fulfill — they share a prover backend. A 422 *"does not exist in source network MAINNET"* means the table is not promoted into the indexer; the cause is almost always a `PRIMARY KEY` clause in the original DDL (this CLI never emits one — see Troubleshooting).
+
+The renderer maps SQL types (`VARCHAR`, `BIGINT`, `BOOLEAN`, `TIMESTAMP`, `INT`, `BINARY`, `TINYINT`, `SMALLINT`) to the appropriate `ProofOfSqlTable` reader and emits a `QueryRow` event with one parameter per projected column.
+
+### How the handoff works
+
+`publish-dataset-cli.mjs` writes `examples/data/.last-publish.json` after every successful publish:
+
+```json
+{
+  "tableRef":     "<YOUR_PROJECT>_<UPPERCASE_HEX>.<YOUR_TABLE>",
+  "prefix":       "<YOUR_PROJECT>",
+  "csvPath":      "/abs/path/to/your.csv",
+  "schemaPath":   "/abs/path/to/your.inferred-schema.json",
+  "lookupColumn": "<YOUR_LOOKUP_COL>",
+  "wallet":       "0x...",
+  "publishedAt":  "..."
+}
+```
+
+The file is **per-local-clone and gitignored** (it carries the publisher's wallet hex). Resolution order in every downstream script: explicit env var → `.last-publish.json` → legacy canonical-demo defaults. This is what lets a forked user run the pipeline against their own dataset, under their own chosen namespace, with no copy-paste between steps.
 
 > Verified live on Base mainnet 2026-05-04. A 2,062-row CSV published to SXT chain, deployed as `OnchainQuery.sol` at [`0x1fc02a8dc0A4050B2DA5D075838F37705fcF0Aa1`](https://basescan.org/address/0x1fc02a8dc0A4050B2DA5D075838F37705fcF0Aa1), queried via `IQueryRouter.requestQuery`. The SXT executor fulfilled the proof in 3 blocks (~6 s). Callback transaction: [`0xd702a4014ec5258a032b39bf9dcfceea838aed51c519d9285f463c1eb23e25b0`](https://basescan.org/tx/0xd702a4014ec5258a032b39bf9dcfceea838aed51c519d9285f463c1eb23e25b0).
 >
@@ -280,9 +312,10 @@ Optional:
 
 | Skill | Plugin | Pipeline step |
 |---|---|---|
-| `dataset-publish` | `dreamspace-data` | Steps 1 and 2 (publish, insert) |
+| `dataset-publish` | `dreamspace-data` | Steps 1 and 2 (publish, insert) — for your own CSVs |
 | `proof-of-sql-foundations` | `dreamspace-query` | Constraint guardrail used during step 3 |
 | `run-proven-query` | `dreamspace-query` | Off-chain bridge for step 3 (covers step 7 callback decoding patterns) |
+| `chain-data-query` | `dreamspace-query` | Skip publish — query SXT's zk-committed Ethereum index directly (ETHEREUM.BLOCKS / ETHEREUM.TRANSACTIONS). Generates parameterized proof plans for trust-minimized L1 → L2 primitives. |
 | `pre-deploy-audit` | `dreamspace-contracts` | Step 5 |
 | `deploy-contract` | `dreamspace-contracts` | Step 6 |
 

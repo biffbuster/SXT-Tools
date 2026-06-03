@@ -25,14 +25,22 @@
 import 'dotenv/config';
 import { SxTClient } from 'sxt-proof-of-sql-sdk';
 import { readFileSync, existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readLastPublish, planDirFor } from './lib/last-publish.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PROVER = process.env.SXT_PROVER ?? 'https://api.makeinfinite.dev';
 const AUTH   = process.env.SXT_AUTH   ?? 'https://proxy.api.makeinfinite.dev/auth/apikey';
 const RPC    = process.env.SXT_RPC_HTTP ?? 'https://rpc.mainnet.sxt.network/';
-const PLAN_DIR = process.env.SXT_PLAN_DIR ?? join(HERE, '..', 'data', 'proof-plans');
+
+// Resolution order: env > .last-publish.json handoff > canonical demo.
+const handoff = readLastPublish();
+const BASE_PLAN_DIR = join(HERE, '..', 'data', 'proof-plans');
+const HANDOFF_TABLE = handoff?.tableRef;
+const PLAN_DIR = process.env.SXT_PLAN_DIR
+  ? resolvePath(process.env.SXT_PLAN_DIR)
+  : (HANDOFF_TABLE ? planDirFor(HANDOFF_TABLE, BASE_PLAN_DIR) : BASE_PLAN_DIR);
 
 const apiKey = process.env.SXT_API_KEY;
 if (!apiKey) {
@@ -55,7 +63,10 @@ function loadPlan(name) {
 const countPlan    = loadPlan('count');
 const pointPlan    = loadPlan('point-lookup');
 const negativePlan = loadPlan('negative-lookup');
-const TABLE = countPlan?.table ?? pointPlan?.table ?? process.env.SXT_TABLE
+const TABLE = process.env.SXT_TABLE
+  ?? countPlan?.table
+  ?? pointPlan?.table
+  ?? HANDOFF_TABLE
   ?? 'MY_AUDIT_V2_5731EC0BBEB5F7BCAA2E4BAF3179A7A4C59C2552.STAKERS';
 
 const client = new SxTClient(PROVER, AUTH, RPC, apiKey);

@@ -3,11 +3,21 @@
  * Submit a proven query against the deployed OnchainQuery contract
  * (default StakersQuery for this repo):
  *   1. Approve 100 SXT (only if existing allowance is short).
- *   2. Call query() — dispatches the Proof of SQL request to QueryRouter.
+ *   2. Call query(...) — dispatches the Proof of SQL request to QueryRouter.
+ *      For parameterized contracts (rendered from indexed-table plans),
+ *      pass --args "val1,val2,..." matching the inputParams in
+ *      .last-rendered.json.
  *   3. Poll for the executor's callback (QueryRow / QueryEmpty event,
  *      or MembershipProven / MembershipNotFound for the StakersQuery
  *      contract specifically) up to MAX_WAIT_MS.
  *   4. Print the proven result and the four transaction hashes.
+ *
+ * Usage:
+ *   # Non-parameterized (e.g. StakersQuery — back-compat):
+ *   node query-onchain.mjs
+ *
+ *   # Parameterized — values forwarded to contract.query(...) typed per inputParams:
+ *   node query-onchain.mjs --args "0xd8da6bf26964af9d7eed9e03e53415d37aa96045,21000000"
  *
  * Env:
  *   PRIVATE_KEY    Wallet that owns the SXT to spend (typically the deployer).
@@ -21,13 +31,54 @@ import { readFileSync, existsSync } from 'node:fs';
 const PROJECT_DIR = '../contracts/sxt-onchain-query';
 const STATE_FILE = `${PROJECT_DIR}/.deploy-state.json`;
 const LAST_RENDERED = `${PROJECT_DIR}/.last-rendered.json`;
-const CONTRACT_NAME = existsSync(LAST_RENDERED)
-  ? JSON.parse(readFileSync(LAST_RENDERED, 'utf8')).contractName
-  : 'StakersQuery';
+const rendered = existsSync(LAST_RENDERED) ? JSON.parse(readFileSync(LAST_RENDERED, 'utf8')) : {};
+const CONTRACT_NAME = rendered.contractName ?? 'StakersQuery';
+const INPUT_PARAMS = Array.isArray(rendered.inputParams) ? rendered.inputParams : [];
+const IS_PARAMETERIZED = Boolean(rendered.parameterized) && INPUT_PARAMS.length > 0;
 const ARTIFACT = `${PROJECT_DIR}/out/${CONTRACT_NAME}.sol/${CONTRACT_NAME}.json`;
 const SXT_TOKEN = '0xA2c22252cDc8b7cDdEe1B0b2E242818509fCf7b8'; // SXT ERC-20 on Base
 const RPC = process.env.ETH_RPC ?? 'https://base.publicnode.com';
 const MAX_WAIT_MS = Number(process.env.MAX_WAIT_MS ?? 180_000);
+
+// Parse --args "val1,val2,...". When the deployed contract is parameterized,
+// these are forwarded to query(...) in order, coerced to the Solidity arg
+// types recorded in .last-rendered.json. Quoting any CSV value with embedded
+// commas is the caller's responsibility — this is a CLI, not a CSV parser.
+function parseCliArgs(argv) {
+  const out = { args: null };
+  for (let i = 2; i < argv.length; i++) {
+    if (argv[i] === '--args') out.args = argv[++i];
+  }
+  return out;
+}
+
+// Coerce a CLI string to the ABI-encodable value ethers expects for each
+// supported Proof-of-SQL ParamsBuilder type. Mirrors the PARAM_BUILDERS
+// table in render-onchain-query.mjs — keep in sync.
+function coerceArgValue(raw, sqlType) {
+  const v = String(raw).trim();
+  switch (String(sqlType).toUpperCase()) {
+    case 'VARCHAR':
+      // SXT stores Ethereum addresses lowercased — match that when coercing
+      // anything that looks like a hex address so downstream proof lookups
+      // hit. Pass through other strings unchanged.
+      return /^0x[0-9a-fA-F]{40}$/.test(v) ? v.toLowerCase() : v;
+    case 'BIGINT':
+    case 'TIMESTAMP':
+      return BigInt(v); // int64 — ethers v6 accepts BigInt
+    case 'INT':
+    case 'INTEGER':
+    case 'SMALLINT':
+    case 'TINYINT':
+      return Number(v);
+    case 'BOOLEAN':
+      return /^(true|1|yes)$/i.test(v);
+    case 'BINARY':
+      return v.startsWith('0x') ? v : `0x${v}`;
+    default:
+      throw new Error(`Unsupported sqlType "${sqlType}" in inputParams — cannot coerce CLI value.`);
+  }
+}
 
 if (!process.env.PRIVATE_KEY) { console.error('✗ PRIVATE_KEY not set'); process.exit(1); }
 if (!existsSync(STATE_FILE))  { console.error(`✗ Deploy state missing at ${STATE_FILE}. Run deploy-onchain-query.mjs first.`); process.exit(1); }
@@ -80,8 +131,37 @@ if (allowance < PAYMENT) {
   console.log(`  ✓ Allowance already covers 100 SXT — skipping approve`);
 }
 
-console.log(`\n▶ Calling query() — submits Proof of SQL request to QueryRouter…`);
-const queryTx = await stakers.query();
+// Resolve query() arguments. For parameterized contracts, --args is REQUIRED
+// (or the chain rejects the call with an arity mismatch); we surface a clear
+// error and the expected shape rather than letting ethers throw a hex string.
+const cliArgs = parseCliArgs(process.argv);
+let queryArgs = [];
+if (IS_PARAMETERIZED) {
+  if (!cliArgs.args) {
+    console.error('');
+    console.error(`✘ ${CONTRACT_NAME} is parameterized. Pass --args "val1,val2,..." in this order:`);
+    for (const [i, p] of INPUT_PARAMS.entries()) {
+      console.error(`     [${i}] ${p.name}  (${p.sqlType} → Solidity ${p.solType})`);
+    }
+    console.error('');
+    console.error('  Example:');
+    console.error(`     node query-onchain.mjs --args "${INPUT_PARAMS.map((p) => p.sqlType === 'VARCHAR' ? '0x...' : '0').join(',')}"`);
+    process.exit(1);
+  }
+  const rawArgs = cliArgs.args.split(',').map((s) => s.trim());
+  if (rawArgs.length !== INPUT_PARAMS.length) {
+    console.error(`✘ Expected ${INPUT_PARAMS.length} --args values, got ${rawArgs.length}.`);
+    process.exit(1);
+  }
+  queryArgs = rawArgs.map((raw, i) => coerceArgValue(raw, INPUT_PARAMS[i].sqlType));
+  console.log('\n  Query parameters:');
+  for (const [i, p] of INPUT_PARAMS.entries()) {
+    console.log(`    ${p.name} (${p.sqlType}) = ${queryArgs[i]}`);
+  }
+}
+
+console.log(`\n▶ Calling query(${queryArgs.length ? '...' : ''}) — submits Proof of SQL request to QueryRouter…`);
+const queryTx = await stakers.query(...queryArgs);
 console.log(`  Tx submitted: ${queryTx.hash}`);
 const queryReceipt = await queryTx.wait();
 console.log(`  ✓ requestQuery confirmed in block ${queryReceipt?.blockNumber}, gas ${queryReceipt?.gasUsed?.toString()}`);

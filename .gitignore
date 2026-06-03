@@ -44,12 +44,28 @@ yarn-error.log*
 # would leak the publisher's absolute CSV path if committed
 *.inferred-schema.json
 
+# cross-skill handoff: written after every successful publish so downstream
+# skills (proof-plan generation, /v1/zkquery verify) auto-pick up the active
+# dataset. Contains the publisher's wallet hex — never commit.
+.last-publish.json
+examples/data/.last-publish.json
+examples/data/proof-plans/*/
+
+# untrack the dataset-specific CSV + schema seeded during the latest
+# debugging session — keep the canonical demo datasets only.
+examples/data/sui_stakers.csv
+examples/data/sui_stakers.inferred-schema.json
+
 # foundry build artifacts (per-project)
 examples/contracts/sxt-onchain-query/dependencies/
 examples/contracts/sxt-onchain-query/cache/
 examples/contracts/sxt-onchain-query/out/
 examples/contracts/sxt-onchain-query/.deploy-state.json
+examples/contracts/sxt-onchain-query/.deploy-state.json.*
 examples/contracts/sxt-onchain-query/.last-rendered.json
+
+# slither audit artifacts — large + ephemeral, generated per-run
+examples/contracts/sxt-onchain-query/slither-*.json
 
 # vercel
 .vercel

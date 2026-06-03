@@ -11,6 +11,11 @@ type SkillSpec = {
   highlights: string[];
   languages: string[];
   cardDescription: string;
+  // "stable" = ready to use today. "coming-soon" = SKILL.md scaffolded
+  // (visible on the catalog so the roadmap is honest) but the CLI
+  // implementation is in progress; the SKILL.md documents today's
+  // workaround until shipping. Default: "stable".
+  status?: "stable" | "coming-soon";
 };
 
 const SKILL_SPECS: SkillSpec[] = [
@@ -27,6 +32,21 @@ const SKILL_SPECS: SkillSpec[] = [
       "Apache Arrow IPC encoding",
       "Substrate RPC: createNamespace + createTables + submitData",
     ],
+  },
+  {
+    plugin: "dreamspace-data",
+    skill: "index-contract",
+    lifecycle: "Publish",
+    stage: 1,
+    languages: ["TypeScript", "Solidity"],
+    cardDescription:
+      "Register an EVM contract for SXT to index its events into queryable tables under your namespace — Seaport, Uniswap, governance contracts. CLI implementation in progress; UI flow at chain.spaceandtime.io ships today.",
+    highlights: [
+      "ABI auto-fetch from Etherscan / BaseScan + event → SXT schema generation",
+      "tableType: SCI extrinsic + per-table indexer funding (~100 SXT/event)",
+      "Trustless onchain data: events from the chain itself, not curated CSVs",
+    ],
+    status: "coming-soon",
   },
   {
     plugin: "dreamspace-query",
@@ -54,6 +74,20 @@ const SKILL_SPECS: SkillSpec[] = [
       "REST submission with proveExecution=true via /v1/zkquery",
       "JWT exchange flow at /auth/apikey (NOT raw API key as bearer)",
       "EVM proof plan via commitments_v1_evmProofPlan for onchain verification",
+    ],
+  },
+  {
+    plugin: "dreamspace-query",
+    skill: "chain-data-query",
+    lifecycle: "Query",
+    stage: 2,
+    languages: ["TypeScript", "Solidity", "SQL"],
+    cardDescription:
+      "Generate a HyperKZG-provable parameterized SQL query against SXT's zk-committed Ethereum index, consumable by a Solidity contract on Base via IQueryRouter.requestQuery.",
+    highlights: [
+      "Restricted to the empirically zk-committed surface (ETHEREUM.BLOCKS, ETHEREUM.TRANSACTIONS)",
+      "Parameterized plans — one deployed contract serves any wallet / block / tx hash at call time",
+      "Trust-minimized L1 → L2: prove Ethereum activity in a Base callback in ~150K gas",
     ],
   },
   {
@@ -144,6 +178,7 @@ function loadSkills(): SkillCard[] {
       highlights: spec.highlights,
       languages: spec.languages,
       githubUrl: `https://github.com/biffbuster/sxt-tools/blob/main/packages/plugins/${spec.plugin}/skills/${spec.skill}/SKILL.md`,
+      status: spec.status ?? "stable",
     } satisfies SkillCard;
   });
 }
