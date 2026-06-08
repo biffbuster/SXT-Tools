@@ -1,6 +1,8 @@
-# How the SXT Toolkit Works
+# How the SXT CLI Works
 
-A from-scratch explanation of how an AI coding agent — Claude Code, in our reference implementation — uses the five SXT Toolkit skills to take a CSV from a local folder to a cryptographic proof event on Base mainnet, **without the user writing any code**.
+A from-scratch explanation of how the SXT CLI takes a dataset (either a local CSV or a verified EVM smart contract whose events you want indexed) to a cryptographic proof event on Base mainnet, with optional natural-language orchestration via an AI coding agent — Claude Code, in our reference implementation — using the six SXT CLI skills.
+
+The skills are agent-runtime-agnostic Markdown that wraps the CLI scripts under `examples/scripts/`. You can run the CLI by hand or let an agent orchestrate it from a single prompt; both paths run the same code.
 
 This is the architectural companion to the [`README.md`](./README.md): how the pieces fit, what the agent reads, and what gets executed at each step.
 
@@ -57,16 +59,19 @@ That separation is what makes the toolkit portable: the skills work in any agent
 
 ---
 
-## The five skills, and what each one knows how to do
+## The seven skills, and what each one knows how to do
 
 ```
 packages/plugins/
 ├── dreamspace-data/
-│   └── skills/dataset-publish/SKILL.md
+│   └── skills/
+│       ├── dataset-publish/SKILL.md       input path A — CSV
+│       └── index-contract/SKILL.md        input path B — verified EVM contract
 ├── dreamspace-query/
 │   └── skills/
 │       ├── proof-of-sql-foundations/SKILL.md
-│       └── run-proven-query/SKILL.md
+│       ├── run-proven-query/SKILL.md
+│       └── chain-data-query/SKILL.md       generates parameterized plans
 └── dreamspace-contracts/
     └── skills/
         ├── deploy-contract/SKILL.md
@@ -92,6 +97,22 @@ Each `SKILL.md` is loaded by the agent when its trigger phrases match the user's
 
 **What you see in the conversation:** a confirmation that your CSV is now a chain-secured table with row count, plus the table reference (`MY_PROJECT_<ADDR>.MY_TABLE`).
 
+### `dreamspace-data:index-contract` — "index this contract's events"
+
+**Triggers on:** "index this contract", "watch Seaport / Uniswap / CryptoPunks events", "give me a queryable table of contract X's history", "register this address with SXT for event indexing."
+
+**What Claude does after activating this skill:**
+
+1. Asks for the contract address + chain + which events to index (or infers from your prompt — e.g. "CryptoPunks ownership" → `PunkBought`).
+2. Walks you through the chain.spaceandtime.io Studio UI flow (the CLI implementation is in progress; the Studio UI ships SCI today). The UI fetches the contract's verified ABI, lets you select events, and SXT auto-generates per-event tables under your namespace.
+3. Explains the indexing-window decision: the agent reads the SKILL.md's rubric to choose between historical-backfill (full contract history → wait for backfill, then query) and live-tail (forward-monitoring only). For "has wallet X ever done Y" questions it picks historical and tells you to poll `MIN(BLOCK_NUMBER)` until backfill reaches the contract's deployment block.
+4. Once the table has rows, runs the off-chain `/v1/zkquery` pre-flight to confirm the SCI table is on the proven surface BEFORE you spend 100 SXT on an on-chain `query()`.
+5. Writes the resulting table ref into `.last-publish.json` with `kind: "indexed-sci"` so downstream skills (`chain-data-query`, `render-onchain-query`, the deploy/query pipeline) auto-pick it up.
+
+**Canonical example:** CryptoPunks (`0xb47e3cd837dDF8e4c57F05d70Ab865de6e193BBB`). Picked because Punks has low-thousands of lifetime trades since 2017 → backfill completes in minutes, so the full pipeline is demoable in one sitting. Swap in any verified EVM contract by re-running with a different `--address` + `--events`.
+
+**What you see in the conversation:** a Studio UI handoff, then once the table is live, a confirmation with the table ref (e.g. `<YOUR_NS>.PUNK_BOUGHT`) and a green-light from the `/v1/zkquery` pre-flight saying the table is ready to query.
+
 ### `dreamspace-query:proof-of-sql-foundations` — the constraint guardrail
 
 **Triggers on:** any time another skill is generating SQL. Activates passively as a check, not via direct user invocation.
@@ -114,6 +135,19 @@ Each `SKILL.md` is loaded by the agent when its trigger phrases match the user's
 4. Surfaces both the result and the proof bytes (or the on-chain transaction hashes) in a structured block.
 
 **What you see in the conversation:** the proven row, the proof's chain-state binding, and either an API receipt or four BaseScan-linkable tx hashes — depending on which path you chose.
+
+### `dreamspace-query:chain-data-query` — "query SXT-indexed chain data with a proof plan"
+
+**Triggers on:** "prove this happened on Ethereum", "verify this transaction in a Solidity contract", "I want a Base contract that consumes Ethereum chain history", "generate a parameterized proof plan."
+
+**What Claude does:**
+
+1. Identifies which zk-committed surface fits the goal: SXT's chain-wide indexed tables (`ETHEREUM.BLOCKS`, `ETHEREUM.TRANSACTIONS`) for arbitrary chain queries, OR your `index-contract`-populated per-event tables for typed event queries.
+2. Generates a **parameterized** SQL → proof plan via `commitments_v1_evmProofPlan` so one deployed contract serves any input. The plan is just hex bytes baked into the contract; runtime args flow through `requestQuery`.
+3. Renders the matching `OnchainQuery.sol` from the parameterized template via `render-onchain-query.mjs --params`.
+4. Hands off to `deploy-contract` + `pre-deploy-audit` for the on-chain consumer side.
+
+**Why this skill exists separately from `run-proven-query`:** parameterized chain-data plans require a different template + a different proof-plan generation flow (chain-state binding, not table-commitment binding). The skill is the dedicated entrypoint for the L1 → L2 trust-minimization use case.
 
 ### `dreamspace-contracts:deploy-contract` — "deploy this contract"
 
@@ -209,7 +243,7 @@ This is what an end-to-end session looks like in the Claude Code CLI. The user t
 │ Yes                                                                    │
 └────────────────────────────────────────────────────────────────────────┘
 
-┌─ Claude (runs verify-stakers.mjs) ────────────────────────────────────┐
+┌─ Claude (runs verify-table.mjs) ────────────────────────────────────┐
 │ ✓ JWT obtained from /auth/apikey                                      │
 │ ✓ Best attested SXT block: 0x83e8f250…                                 │
 │ ✓ Submitted /v1/zkquery → 202 Accepted                                │
@@ -278,7 +312,7 @@ When Claude follows a skill's instructions, it runs these scripts as subprocesse
 
 ### 3. Skills compose freely across plugins
 
-The five skills are split across three plugin packages so you can install only what you need:
+The seven skills are split across three plugin packages so you can install only what you need:
 
 | Plugin | When to install |
 |---|---|
@@ -332,13 +366,13 @@ The agent loads the relevant SKILL.md, asks for any missing details, and runs th
 
 The agent's value isn't typing commands you couldn't type yourself. It's:
 
-1. **Knowing the right script for your goal.** Five skills, eight scripts, multiple combinations. Claude picks correctly because the SKILL.md files describe their triggers precisely.
+1. **Knowing the right script for your goal.** Seven skills, two input paths (CSV or contract-events), eight+ scripts, multiple combinations. Claude picks correctly because the SKILL.md files describe their triggers precisely.
 2. **Enforcing protocol-level rules** that aren't checked by the chain or the API but break the pipeline silently — "no `PRIMARY KEY` in the DDL", "`MAINNET` is the only valid `sourceNetwork`", "exchange API key for JWT before any REST call". These are encoded in the skill bodies and the script defaults.
 3. **Refusing unprovable queries** before you spend 100 SXT discovering the executor will silently drop them. `proof-of-sql-foundations` is the airtight refusal layer.
 4. **Gating real-money operations** behind confirmations. Every deploy and every `query()` requires explicit approval — the skills' instructions tell the agent to stop and ask.
 5. **Surfacing verifiable evidence**, not just "it worked". Every successful proof returns the four tx hashes you can paste into BaseScan.
 
-That's why this is an *agent toolkit*, not a CLI. The CLI is open-source underneath — you can run any script by hand. The agent layer is what turns "I have a CSV and I want a Base event proving X" into one prompt.
+That's why the SXT CLI ships with an agent skill layer on top. The CLI is open-source underneath — every script under `examples/scripts/` is independently runnable; the package has no Claude-specific code. The agent layer is what turns "I have a CSV (or a contract I want to index) and I want a Base event proving X" into one prompt instead of seven. Use either path: drive the CLI by hand for full control, or let an agent orchestrate it with the protocol-level guardrails enforced by the skills.
 
 ---
 

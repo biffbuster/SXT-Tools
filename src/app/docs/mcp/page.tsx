@@ -59,7 +59,7 @@ cd sxt-tools && npm install   # root postinstall builds the MCP server`}</code>
 
       <h2 id="why-mcp">Why MCP, not just the plugin marketplace</h2>
       <p>
-        Today the five skills install through Claude Code's plugin marketplace as
+        Today the seven skills install through Claude Code's plugin marketplace as
         Markdown <code>SKILL.md</code> files — works perfectly inside Claude Code, but
         nowhere else. MCP is Anthropic's open spec for connecting agents to tools and
         data. By shipping one MCP server, the same skills become callable from every
@@ -386,7 +386,7 @@ npm run dev    # stdio, ready for local Claude Desktop wiring`}</code>
       <h2 id="related">Related</h2>
       <ul>
         <li>
-          <Link href="/docs">Skills catalog</Link> — the five skills the server wraps
+          <Link href="/docs">Skills catalog</Link> — the seven skills the server wraps
         </li>
         <li>
           <Link href="/docs/quick-start">Quick start</Link> — five commands from clone

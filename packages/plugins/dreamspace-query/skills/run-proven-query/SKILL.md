@@ -1,4 +1,4 @@
----
+--
 name: run-proven-query
 description: >-
   Translate a user's natural-language question about a published Space and Time
@@ -11,6 +11,10 @@ description: >-
 ---
 
 # Run Proven Query
+
+## Under maintenance
+
+This skill depends on the off-chain Proof of SQL prover and is temporarily unavailable.
 
 ## What this skill does
 
@@ -86,7 +90,7 @@ Optional:
 
 ### Auto-pickup from a recent publish
 
-The `dataset-publish` skill writes `examples/data/.last-publish.json` after a successful publish. The bundled CLI scripts (`save-proof-plans.mjs`, `verify-stakers.mjs`) read that file as a fallback for `SXT_TABLE` / `SXT_SCHEMA_PATH` / `SXT_LOOKUP_COLUMN`. The flow forked users see:
+The `dataset-publish` skill writes `examples/data/.last-publish.json` after a successful publish. The bundled CLI scripts (`save-proof-plans.mjs`, `verify-table.mjs`) read that file as a fallback for `SXT_TABLE` / `SXT_SCHEMA_PATH` / `SXT_LOOKUP_COLUMN`. The flow forked users see:
 
 1. Drop CSV → run `dataset-publish` → handoff file written
 2. Run this skill (or any downstream skill) → no need to retype table ref, schema path, or lookup column
@@ -211,7 +215,7 @@ Response field reference:
 | 400 | `source network 'X' is not supported` | You passed something other than the literal `"MAINNET"`. There is no other accepted enum value, even for user-published Community-tier tables. |
 | 422 | other | Surface the body verbatim — the prover names the offending field. |
 
-If you see the 422 "does not exist in source network MAINNET" error against a table you know was published successfully, run the off-chain pre-flight in `examples/scripts/verify-stakers.mjs` for a clean reproduction; the resolution is almost always to republish the table without a PRIMARY KEY clause in the DDL.
+If you see the 422 "does not exist in source network MAINNET" error against a table you know was published successfully, run the off-chain pre-flight in `examples/scripts/verify-table.mjs` for a clean reproduction; the resolution is almost always to republish the table without a PRIMARY KEY clause in the DDL.
 
 ### Step 4 — Present the result + receipt
 
@@ -263,7 +267,7 @@ Query 2 (cardinality):
   SELECT COUNT(*) AS N FROM MY_AUDIT_5731EC...2552.STAKERS
 ```
 
-Then run both, surface the rows + receipt for each, and hand the user the verifier addresses so they can validate either receipt onchain. If the user wants this as a reusable script, write `verify-<table>.mjs` next to their CSV with the same structure as `examples/scripts/verify-stakers.mjs` in this repo.
+Then run both, surface the rows + receipt for each, and hand the user the verifier addresses so they can validate either receipt onchain. If the user wants this as a reusable script, write `verify-<table>.mjs` next to their CSV with the same structure as `examples/scripts/verify-table.mjs` in this repo.
 
 ## What this skill is not
 
@@ -286,5 +290,5 @@ Then run both, surface the rows + receipt for each, and hand the user the verifi
   - Ethereum mainnet: `0x55780Ba21EdFBbFEb7033a0F2FC5Cf55Cd62ACf9`
   - Base mainnet: `0x13b7463a07Aac6Bd483E4329a7F6768Da1A65518`
   - QueryRouter (both networks): `0x220a7036a815a1Bd4A7998fb2BCE608581fA2DbB`
-- Worked-out script: `examples/scripts/verify-stakers.mjs` in this repo — copy and adapt the queries for any table. Set `SXT_TABLE` and `SAMPLE_STAKER` env vars to point at your own data.
+- Worked-out script: `examples/scripts/verify-table.mjs` in this repo — copy and adapt the queries for any table. Set `SXT_TABLE` and `SAMPLE_STAKER` env vars to point at your own data.
 - Reference SDK source: `node_modules/sxt-proof-of-sql-sdk/index_tail.js` (in `examples/scripts/`) — the `queryAndVerify` method is the SDK's canonical implementation of the same flow this skill documents.

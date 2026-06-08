@@ -144,7 +144,8 @@ for (const plugin of PLUGIN_NAMES) {
 
 // ─── SKILL.md frontmatter ────────────────────────────────────────────────
 
-section("SKILL.md frontmatter (5 skills)");
+const EXPECTED_SKILL_COUNT = 7;
+section(`SKILL.md frontmatter (${EXPECTED_SKILL_COUNT} skills)`);
 
 const SKILL_PATHS = [];
 for (const plugin of PLUGIN_NAMES) {
@@ -156,9 +157,9 @@ for (const plugin of PLUGIN_NAMES) {
   }
 }
 
-if (SKILL_PATHS.length !== 5) {
+if (SKILL_PATHS.length !== EXPECTED_SKILL_COUNT) {
   results.push({
-    name: "expected 5 SKILL.md files",
+    name: `expected ${EXPECTED_SKILL_COUNT} SKILL.md files`,
     ok: false,
     error: `found ${SKILL_PATHS.length}`,
   });
@@ -167,11 +168,11 @@ if (SKILL_PATHS.length !== 5) {
 for (const s of SKILL_PATHS) {
   await check(`${s.plugin}/${s.skill}`, () => {
     const raw = readFileSync(s.path, "utf8");
-    const m = raw.match(/^---\n([\s\S]*?)\n---/);
+    const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
     if (!m) throw new Error("no frontmatter");
     const fm = m[1];
-    const name = fm.match(/name:\s*(.+)/)?.[1]?.trim();
-    const desc = fm.match(/description:\s*(.+)/)?.[1]?.trim();
+    const name = fm.match(/name:\s*(.+?)\s*$/m)?.[1]?.trim();
+    const desc = fm.match(/description:\s*(.+?)\s*$/m)?.[1]?.trim();
     if (!name) throw new Error("name missing");
     if (!desc) throw new Error("description missing");
     if (name !== s.skill) throw new Error(`name "${name}" doesn't match dir "${s.skill}"`);

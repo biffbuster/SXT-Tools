@@ -314,7 +314,7 @@ async function main() {
   console.log('');
   console.log('Next steps:');
   console.log('  • Off-chain pre-flight (free, ~1s):');
-  console.log(`      SXT_PLAN=${outPath} node verify-stakers.mjs --params "<arg1>[,<arg2>...]"`);
+  console.log(`      SXT_PLAN=${outPath} node verify-table.mjs --params "<arg1>[,<arg2>...]"`);
   console.log('');
   console.log('  • Render Solidity contract (once render-onchain-query.mjs --params support lands):');
   console.log(`      node render-onchain-query.mjs --plan ${outPath} --name <ContractName> --params`);

@@ -1,4 +1,4 @@
-# @biffbuster/sxt-mcp
+ @biffbuster/sxt-mcp
 
 MCP server for Space and Time. Exposes the publish-and-prove pipeline as typed MCP tools, callable from Claude Desktop, Cursor, ChatGPT Developer Mode, and any other client that speaks the Model Context Protocol.
 
@@ -20,7 +20,7 @@ Each handler mirrors the canonical script under `examples/scripts/` line-for-lin
 | Tool | Cost surface | Mirror script |
 |---|---|---|
 | `sxt.publish_dataset` | SXT chain credits per row | `examples/scripts/publish-dataset-cli.mjs` |
-| `sxt.run_proven_query` | One `/v1/zkquery` API tick | `examples/scripts/verify-stakers.mjs` |
+| `sxt.run_proven_query` | One `/v1/zkquery` API tick | `examples/scripts/verify-table.mjs` |
 | `sxt.audit_contract` | None (pure local `forge build` + `slither`) | `examples/scripts/audit-with-sxt.mjs` |
 | `sxt.deploy_contract` | ~$0.50 ETH gas | `examples/scripts/deploy-onchain-query.mjs` |
 | `sxt://docs/proof-of-sql-foundations` | None (MCP resource, Markdown) | `packages/plugins/dreamspace-query/skills/proof-of-sql-foundations/SKILL.md` |

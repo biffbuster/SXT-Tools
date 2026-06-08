@@ -55,7 +55,7 @@ $ # edit examples/scripts/.env — set SXT_API_KEY and PRIVATE_KEY`}</code></pre
       </p>
       <pre><code>{`$ node examples/scripts/mcp-parity-test.mjs
   Path A: via MCP server (sxt.run_proven_query tool)…  ✓ verified=true  ROW_COUNT=2062
-  Path B: direct SDK call (verify-stakers.mjs equiv)…   ✓ verified=true  ROW_COUNT=2062
+  Path B: direct SDK call (verify-table.mjs equiv)…   ✓ verified=true  ROW_COUNT=2062
   ✓ Parity confirmed.`}</code></pre>
       <p>Cost: 1 API tick, zero chain spend.</p>
 
@@ -199,7 +199,7 @@ Report verified=true/false for each.`}</code></pre>
 
       <h2 id="next">Next</h2>
       <ul>
-        <li>The five skills with trigger phrases and refusal rules: <Link href="/docs">Skills catalog</Link></li>
+        <li>The seven skills with trigger phrases and refusal rules: <Link href="/docs">Skills catalog</Link></li>
         <li>MCP server tools, transport, and roadmap: <Link href="/docs/mcp">MCP integration</Link></li>
         <li>Protocol primitives (Proof of SQL, QueryRouter, Verifier): <Link href="/docs/space-and-time">Space and Time primitives</Link></li>
         <li>Architecture deep-dive: <a href="https://github.com/biffbuster/sxt-tools/blob/main/HOW_IT_WORKS.md" target="_blank" rel="noopener noreferrer">HOW_IT_WORKS.md</a></li>

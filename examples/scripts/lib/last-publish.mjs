@@ -3,7 +3,7 @@
  *
  * publish-dataset-cli.mjs (and the MCP publish_dataset tool) write
  * examples/data/.last-publish.json after a successful publish. Downstream
- * skills — save-proof-plans.mjs, verify-stakers.mjs, the MCP
+ * skills — save-proof-plans.mjs, verify-table.mjs, the MCP
  * run_proven_query tool — read it as a fallback when their explicit env
  * vars / args aren't supplied.
  *

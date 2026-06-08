@@ -40,7 +40,7 @@ const SKILL_SPECS: SkillSpec[] = [
     stage: 1,
     languages: ["TypeScript", "Solidity"],
     cardDescription:
-      "Register an EVM contract for SXT to index its events into queryable tables under your namespace — Seaport, Uniswap, governance contracts. CLI implementation in progress; UI flow at chain.spaceandtime.io ships today.",
+      "Register any verified EVM contract for SXT to index its events into queryable tables under your namespace. Data ingestion via the chain.spaceandtime.io UI ships today; SXT's docs list SCI zk-commitment itself as 'coming soon' so the on-chain proof pipeline against SCI tables isn't end-to-end yet. CLI implementation also in progress.",
     highlights: [
       "ABI auto-fetch from Etherscan / BaseScan + event → SXT schema generation",
       "tableType: SCI extrinsic + per-table indexer funding (~100 SXT/event)",
@@ -345,7 +345,7 @@ export default function DocsPage() {
       <section className="skills-plugins-section" id="plugins">
         <h2 className="skills-section-title">Plugins</h2>
         <p className="skills-section-lede">
-          Three plugins bundle the five skills by lifecycle stage. Install one or all.
+          Three plugins bundle the seven skills by lifecycle stage. Install one or all.
         </p>
         <div className="skills-plugin-grid">
           <div className="skills-plugin-card">

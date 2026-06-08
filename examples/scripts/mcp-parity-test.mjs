@@ -2,12 +2,12 @@
 /**
  * mcp-parity-test.mjs — proves MCP wrapping is a correct protocol adapter.
  *
- * The MCP server wraps the same SDK that verify-stakers.mjs uses. Both should
+ * The MCP server wraps the same SDK that verify-table.mjs uses. Both should
  * produce identical verified results for the same SQL — if they don't, the
  * MCP layer is lossy. This script exercises both paths and diffs their output.
  *
  * Path A: spawn the MCP server, send tools/call sxt.run_proven_query
- * Path B: call SxTClient.queryAndVerify directly (same as verify-stakers.mjs)
+ * Path B: call SxTClient.queryAndVerify directly (same as verify-table.mjs)
  *
  * Both paths run against the live mainnet prover. Cost: 2× API quota tick.
  *
@@ -163,7 +163,7 @@ try {
 }
 log("");
 
-log("  Path B: direct SDK call (verify-stakers.mjs equivalent)…");
+log("  Path B: direct SDK call (verify-table.mjs equivalent)…");
 try {
   sdkResult = await runViaSdk();
   log(`    ✓ ${sdkResult.elapsedMs}ms`);

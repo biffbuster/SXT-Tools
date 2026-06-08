@@ -1,4 +1,4 @@
----
+--
 name: dataset-publish
 description: Publish a dataset to Space and Time as a chain-secured table that supports Proof of SQL queries. Use when the user wants to upload a CSV / Parquet / JSON file to SXT, create a custom queryable table, share reference data (e.g., known-exploit signatures, allowlists, off-chain metadata) with downstream skills, or stand up data that the pre-deploy-audit skill can cross-reference against. Walks the user through both the no-code chain.spaceandtime.io flow and the programmatic Substrate RPC flow with Apache Arrow IPC encoding.
 ---
@@ -71,7 +71,7 @@ node publish-dataset-cli.mjs ./data/members.csv
 node publish-dataset-cli.mjs ./data/audit.csv ACME_AUDIT.SIGNATURES
 ```
 
-The cross-skill handoff (`.last-publish.json`) carries the full table reference *and* the prefix portion separately, so every downstream skill (`run-proven-query`, `save-proof-plans`, `verify-stakers`, `render-onchain-query`) auto-picks up whichever dataset was published most recently — no env-var copy-paste between steps.
+The cross-skill handoff (`.last-publish.json`) carries the full table reference *and* the prefix portion separately, so every downstream skill (`run-proven-query`, `save-proof-plans`, `verify-table`, `render-onchain-query`) auto-picks up whichever dataset was published most recently — no env-var copy-paste between steps.
 
 ## Schema design — when the user has no `schema.json`
 
@@ -188,7 +188,7 @@ node examples/scripts/publish-dataset-cli.mjs ./examples/data/drainers.csv --loo
 
 ### Cross-skill handoff (the "active dataset" mechanism)
 
-After a successful publish, the CLI writes `examples/data/.last-publish.json` capturing `{tableRef, prefix, csvPath, schemaPath, lookupColumn, wallet, publishedAt}`. **This is the contract that lets every downstream CLI skill pick up the dataset the user just published with zero configuration** — `save-proof-plans.mjs`, `verify-stakers.mjs`, and `render-onchain-query.mjs` read it as a fallback when their explicit env vars aren't set. The persisted `prefix` field is also what makes the *next* publish a one-liner (the CLI reuses it; the user doesn't retype it).
+After a successful publish, the CLI writes `examples/data/.last-publish.json` capturing `{tableRef, prefix, csvPath, schemaPath, lookupColumn, wallet, publishedAt}`. **This is the contract that lets every downstream CLI skill pick up the dataset the user just published with zero configuration** — `save-proof-plans.mjs`, `verify-table.mjs`, and `render-onchain-query.mjs` read it as a fallback when their explicit env vars aren't set. The persisted `prefix` field is also what makes the *next* publish a one-liner (the CLI reuses it; the user doesn't retype it).
 
 The handoff file is **per-local-clone and gitignored** (it contains the publisher's wallet hex). Each forked user gets their own publish → auto-pickup chain without leaking wallet identity into PRs.
 
@@ -303,9 +303,9 @@ SELECT COUNT(*) AS ROWS_PUBLISHED
 FROM MY_AUDIT.KNOWN_EXPLOITS
 ```
 
-Run this through the SXT prover at `https://api.makeinfinite.dev/v1/zkquery`. The raw `SXT_API_KEY` is not a Bearer token; exchange it for a 25-minute JWT at `https://proxy.api.makeinfinite.dev/auth/apikey` first. The `sxt-proof-of-sql-sdk` package handles the exchange, submit, poll, and verify flow in one call. The canonical implementation lives in `examples/scripts/verify-stakers.mjs`. If the SDK returns a verified row count that matches what you uploaded, the table is committed and ready for downstream skills.
+Run this through the SXT prover at `https://api.makeinfinite.dev/v1/zkquery`. The raw `SXT_API_KEY` is not a Bearer token; exchange it for a 25-minute JWT at `https://proxy.api.makeinfinite.dev/auth/apikey` first. The `sxt-proof-of-sql-sdk` package handles the exchange, submit, poll, and verify flow in one call. The canonical implementation lives in `examples/scripts/verify-table.mjs`. If the SDK returns a verified row count that matches what you uploaded, the table is committed and ready for downstream skills.
 
-Or simpler: just run `node examples/scripts/verify-stakers.mjs` with no arguments — it reads `.last-publish.json` and runs the cardinality + point-lookup proofs against whatever was just published.
+Or simpler: just run `node examples/scripts/verify-table.mjs` with no arguments — it reads `.last-publish.json` and runs the cardinality + point-lookup proofs against whatever was just published.
 
 ## Common datasets worth publishing
 

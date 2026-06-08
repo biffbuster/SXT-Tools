@@ -1,7 +1,7 @@
-/**
+**
  * sxt.run_proven_query — off-chain Proof of SQL via /v1/zkquery.
  *
- * Mirrors examples/scripts/verify-stakers.mjs line-for-line. Uses the
+ * Mirrors examples/scripts/verify-table.mjs line-for-line. Uses the
  * sxt-proof-of-sql-sdk SxTClient which encapsulates:
  *   1. POST /auth/apikey → 25-min JWT
  *   2. attestation_v1_bestRecentAttestations → recent block hash
@@ -21,7 +21,7 @@ import { z } from "zod";
 import { loadConfig } from "../lib/config.js";
 import { MissingCredentialError } from "../lib/errors.js";
 
-// Endpoints match verify-stakers.mjs and the SXT canonical examples.
+// Endpoints match verify-table.mjs and the SXT canonical examples.
 const PROVER_URL = process.env.SXT_PROVER ?? "https://api.makeinfinite.dev";
 const AUTH_URL = process.env.SXT_AUTH ?? "https://proxy.api.makeinfinite.dev/auth/apikey";
 const RPC_HTTP = process.env.SXT_RPC_HTTP ?? "https://rpc.mainnet.sxt.network/";

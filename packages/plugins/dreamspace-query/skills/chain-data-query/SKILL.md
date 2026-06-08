@@ -1,9 +1,13 @@
----
+--
 name: chain-data-query
 description: Query SXT-indexed Ethereum chain data with a Proof of SQL receipt — and consume the result inside a Solidity contract on Base via IQueryRouter.requestQuery. Use when the user wants to prove a wallet's onchain activity, verify a specific L1 transaction exists, confirm L1 block finality, or build any trust-minimized cross-chain primitive that depends on Ethereum history. Generates parameterized proof plans so one deployed contract serves any input. Pairs with proof-of-sql-foundations (the surface guardrail), pre-deploy-audit, and deploy-contract.
 ---
 
 # Chain Data Query
+
+## Under maintenance
+
+This skill depends on the off-chain Proof of SQL prover and is temporarily unavailable.
 
 ## What this skill does
 
@@ -22,18 +26,26 @@ Do **not** invoke this skill when:
 - The user wants to query their own CSV — that's `dataset-publish` followed by `run-proven-query`.
 - The user wants to query an arbitrary indexed table from `chain.spaceandtime.io` Studio that isn't in the zk-committed surface — see the next section. Refuse and explain the surface limit.
 
-## ⚠️ Critical constraint — the zk-committed surface is narrow today
+## The zk-committed surface today — 6 tables empirically, despite SXT docs claiming 23
 
-The SXT Studio catalog advertises ~22 indexed chain tables (`ETHEREUM.LOGS`, `BASE.TOKEN_ERC20_TRANSFERS`, `ETHEREUM.TOKEN_ERC721_TRANSFERS`, etc.). **Most of these are NOT yet zk-committed** and will fail with chain error `254018: "tables do not exist or have incomplete commitment coverage for all schemes"`.
+SXT's [Indexed Ethereum Data (ZK-proven)](https://docs.spaceandtime.io/docs/indexed-ethereum-data-zk-proven) docs page lists 23 pre-indexed Ethereum tables as ZK-proven. **Empirically only 6 are actually queryable** as of 2026-06-08 — the other 17 (including every ERC-20, ERC-721, ERC-1155 table) return chain error `254018: "incomplete commitment coverage"` when you try to generate a proof plan against them. SCI tables (user-registered contracts via "Get data from chain") are also listed as "coming soon" and similarly fail — **don't try to query SCI tables through this skill**.
 
-**Validated empirically 2026-06-01, these are the ONLY tables this skill can use:**
+**Empirically validated zk-proven surface (2026-06-08, via `commitments_v1_evmProofPlan` probe):**
 
 | Table | Columns | Useful for |
 |---|---|---|
 | `ETHEREUM.BLOCKS` | `BLOCK_NUMBER` (BIGINT) | L1 block finality proofs |
-| `ETHEREUM.TRANSACTIONS` | `TIME_STAMP`, `BLOCK_NUMBER`, `TRANSACTION_HASH`, `TRANSACTION_INDEX`, `TRANSACTION_FEE`, `FROM_ADDRESS`, `TO_ADDRESS` | Wallet activity, transaction receipts, gas history, contract call counts |
+| `ETHEREUM.TRANSACTIONS` | `TIME_STAMP`, `BLOCK_NUMBER`, `TRANSACTION_HASH`, `TRANSACTION_INDEX`, `TRANSACTION_FEE`, `FROM_ADDRESS`, `TO_ADDRESS` | Wallet activity, transaction receipts, gas history, contract interaction counts |
+| `ETHEREUM.TRANSACTION_DETAILS` | `TIME_STAMP`, `BLOCK_NUMBER`, `TRANSACTION_HASH`, `TRANSACTION_INDEX`, `METHOD_ID`, `RECEIPT_CONTRACT_ADDRESS`, `TYPE_`, `GAS_PRICE`, `NONCE`, `RECEIPT_GAS_USED`, `MAX_FEE_PER_GAS`, `MAX_PRIORITY_FEE_PER_GAS`, `RECEIPT_EFFECTIVE_GAS_PRICE`, `LOGS_COUNT` | Function-selector proofs (METHOD_ID), gas analytics. Note: no FROM_ADDRESS — can't directly prove which wallet called what. |
+| `ETHEREUM.CONTRACTS` | `TIME_STAMP`, `BLOCK_NUMBER`, `TRANSACTION_HASH`, `TRANSACTION_INDEX`, `CONTRACT_ADDRESS`, `CONTRACT_CREATOR_ADDRESS` | "Wallet X deployed contract Y" proofs |
+| `ETHEREUM.NATIVE_WALLETS` | `TIME_STAMP`, `BLOCK_NUMBER`, `WALLET_ADDRESS`, `BALANCE` | ETH balance snapshot proofs |
+| `ETHEREUM.NATIVE_TOKEN_TRANSFERS` | `TIME_STAMP`, `BLOCK_NUMBER`, `TRANSACTION_HASH`, `TRANSACTION_INDEX`, `FROM_`, `TO_`, `VALUE_` | Direct ETH-to-address transfers. Column names use trailing underscore. Whether mint-era msg.value into contracts is captured is **not yet end-to-end validated**. |
 
-Need to query NFT transfers, ERC-20 events, BASE.* data, or anything else? **Refuse and explain**: those tables aren't zk-committed today. Counter-offer: publish your own CSV via `dataset-publish` if you have the data, or wait for SXT to expand the committed surface.
+**Not on the proven surface** (confirmed 2026-06-08): ALL ERC-20 tables, ALL ERC-721 tables (including the one we'd love for NFT ownership demos), ALL ERC-1155 tables, all proxy-upgrade tables, `ETHEREUM.LOGS`, all BASE.* tables, all SCI user-registered tables.
+
+**Pre-flight before assuming.** Always validate a candidate table via `commitments_v1_evmProofPlan` (free, ~200ms RPC call) before building anything on it. `generate-chain-plan.mjs` does this gate automatically — if it returns 254018, stop.
+
+**Refuse and explain** for: any table not in the 6-row validated set above, BASE.* anything (no zk-committed BASE catalog), arbitrary Studio-cataloged tables, SCI-registered user tables (those go through `index-contract`'s "coming soon" path).
 
 ## Inputs
 
@@ -98,7 +110,7 @@ Before spending 100 SXT on the onchain call, verify the proof plan actually fulf
 
 ```bash
 SXT_PLAN=./examples/data/proof-plans/wallet-activity.json \
-node examples/scripts/verify-stakers.mjs \
+node examples/scripts/verify-table.mjs \
   --params "0xd8da6bf26964af9d7eed9e03e53415d37aa96045,21000000"
 ```
 

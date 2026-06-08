@@ -280,7 +280,7 @@ const STEPS = [
     name: "Off-chain Proof of SQL (pre-flight)",
     cost: "free (API quota only)",
     budget: 30_000,
-    fn: () => spawnStreamed("node", ["verify-stakers.mjs"], { cwd: HERE }),
+    fn: () => spawnStreamed("node", ["verify-table.mjs"], { cwd: HERE }),
   },
   {
     name: "On-chain proven query — CLIMAX",
@@ -386,7 +386,7 @@ for (const t of stepTimings) {
 
 console.log(`\n  ${bold("Total wall-clock:")} ${(totalElapsed / 1000).toFixed(1)}s`);
 console.log(`  ${bold("Published table:")} ${FULL_TABLE_REF}`);
-console.log(`  ${bold("Verify table again:")} \`SXT_TABLE=${FULL_TABLE_REF} node verify-stakers.mjs\``);
+console.log(`  ${bold("Verify table again:")} \`SXT_TABLE=${FULL_TABLE_REF} node verify-table.mjs\``);
 
 // If we deployed, surface the address from .deploy-state.json.
 const stateFile = resolve(FORGE_PROJECT, ".deploy-state.json");

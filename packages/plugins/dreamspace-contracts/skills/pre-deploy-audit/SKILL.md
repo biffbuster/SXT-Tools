@@ -1,4 +1,4 @@
----
+--
 name: pre-deploy-audit
 description: Pre-deployment and post-deployment Solidity contract audit. Combines slither static analysis with Space and Time onchain due diligence — cross-referencing the contract against user-published reference datasets (known exploit signatures, drainer wallets, trusted deployer allowlists) and indexed contract event history. Produces a structured audit report. Use when the user is about to deploy a Solidity contract, asks to audit a source file or deployed address, asks "is this contract safe", or mentions cross-referencing against reference data. Refuses to certify any contract as "safe" — only produces evidence the user reviews before deciding.
 ---
@@ -104,7 +104,7 @@ If the user passes a known demo-marker hash (e.g., `--demo` flag or pasted hash)
 
 **Step 2. Query SXT with Proof of SQL via the SDK.**
 
-The `/v1/zkquery` flow requires a JWT exchanged from your raw API key first. The `sxt-proof-of-sql-sdk` package handles the exchange, submit, poll, and proof verification in one call. Mirror the pattern in `examples/scripts/verify-stakers.mjs`:
+The `/v1/zkquery` flow requires a JWT exchanged from your raw API key first. The `sxt-proof-of-sql-sdk` package handles the exchange, submit, poll, and proof verification in one call. Mirror the pattern in `examples/scripts/verify-table.mjs`:
 
 ```javascript
 import { SxTClient } from 'sxt-proof-of-sql-sdk';

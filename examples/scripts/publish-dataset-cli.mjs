@@ -585,7 +585,7 @@ async function main() {
     lookupColumn = match;
   }
 
-  // Cross-skill handoff. Downstream skills (save-proof-plans, verify-stakers,
+  // Cross-skill handoff. Downstream skills (save-proof-plans, verify-table,
   // MCP run_proven_query) read this file as a fallback when their explicit
   // env / args aren't set — so a forked user's next skill "just knows" which
   // table, schema, and lookup column the last publish produced. The user's
@@ -614,7 +614,7 @@ async function main() {
   console.log('');
   console.log('Next steps — these skills now auto-pick up this dataset:');
   console.log('  • node save-proof-plans.mjs     # generate proof plans for this table');
-  console.log('  • node verify-stakers.mjs       # off-chain Proof of SQL via /v1/zkquery');
+  console.log('  • node verify-table.mjs       # off-chain Proof of SQL via /v1/zkquery');
   console.log(`  • node publish-dataset-cli.mjs <next.csv>   # reuses prefix "${prefix}" automatically`);
   console.log('');
   console.log('Override the handoff per-run by setting SXT_TABLE / SXT_SCHEMA_PATH / SXT_LOOKUP_COLUMN,');

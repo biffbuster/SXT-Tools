@@ -1,58 +1,33 @@
-# sxt-tools
+# sxt-tools — the Space and Time CLI
 
-Two surfaces for working with Space and Time from inside an AI agent.
+A CLI for Space and Time Proof of SQL, shipped two ways: a Claude Code plugin marketplace (seven skills) and a typed MCP server (stdio + read-only HTTP) for any MCP-aware client including ChatGPT Developer Mode.
 
-A plugin marketplace for coding agents that publishes CSVs, runs Proof of SQL queries, audits Solidity, and deploys proof-consuming contracts. A typed MCP server that exposes the same workflows to any MCP-aware client, including a narrowed read-only HTTP transport for ChatGPT Developer Mode connectors.
+**Two input paths into the same proven pipeline:**
 
-Every query returns a HyperKZG proof receipt verifiable on Base or Ethereum mainnet for roughly 150K gas. The full publish-to-on-chain-callback pipeline runs end-to-end in under fifteen minutes against fresh tables.
+- **Publish a CSV** as a chain-secured SXT table (`dataset-publish`)
+- **Index a verified smart contract** so SXT generates per-event tables under your namespace (`index-contract`)
 
-This repo is self-contained. Clone, fund a wallet, run.
+From either path: generate a parameterized Proof of SQL plan → render a typed Solidity verifier → audit → deploy to Base or Ethereum → call `query()`. The SXT executor returns a HyperKZG proof receipt verifiable on-chain in ~150K gas via the QueryRouter.
+
+This repo is self-contained. Clone, fund a wallet, run — or watch an agent do it.
 
 ---
 
 ## Status
 
-Built by [biffbuster](https://github.com/biffbuster) on top of public Space and Time infrastructure. Not endorsed, approved, or supported by Space and Time yet. The MCP server ships under a self-imposed phased rollout and mainnet double-gate so the surface stays reviewable and contained for the SXT team to inspect at any time. Treat on-chain `query()` artifacts as proof-of-concept until SXT sanctions the toolchain.
+Built by [biffbuster](https://github.com/biffbuster) on public Space and Time infrastructure. Not endorsed or supported by Space and Time. Treat on-chain `query()` artifacts as proof-of-concept.
 
----
+### Interactions with the prover are under maintenance
 
-## What ships today
+Skills and scripts that depend on the off-chain Proof of SQL prover are temporarily unavailable. The rest of the repo is unaffected.
 
-Two distribution channels, both working. The seamless experience lives in the plugin path. The MCP server gives Claude Desktop, Cursor, and (self-hosted today) ChatGPT a programmatic surface over the same workflows.
-
-### 1. Plugin marketplace (the seamless path)
-
-Three plugins for Claude Code. Six skills total. The format is portable Markdown, so any agent that reads `SKILL.md` files can run the workflows. Cursor support via Skills CLI; additional agent integrations in scope for follow-on releases.
-
-```
-/plugin marketplace add biffbuster/sxt-tools
-/plugin install dreamspace-data@sxt-tools
-/plugin install dreamspace-query@sxt-tools
-/plugin install dreamspace-contracts@sxt-tools
-```
-
-| Plugin | Skills | What it covers |
-|---|---|---|
-| `dreamspace-data` | `dataset-publish` | Publish a CSV as a chain-secured SXT table |
-| `dreamspace-query` | `proof-of-sql-foundations`, `run-proven-query`, `chain-data-query` | Generate provable SQL (against your own table or SXT-indexed Ethereum data) and execute it for a HyperKZG proof |
-| `dreamspace-contracts` | `pre-deploy-audit`, `deploy-contract` | Audit and deploy the proof-consuming Solidity |
-
-Setup once: install the plugin, paste `SXT_API_KEY` into the host config. Ask Claude a question against the canonical demo table and a HyperKZG proof comes back in roughly three seconds.
-
-### 2. Typed MCP server
-
-`@biffbuster/sxt-mcp` exposes four tools to MCP-aware clients. Two binaries ship in the package.
-
-| Binary | Transport | Tools exposed | Use |
-|---|---|---|---|
-| `sxt-mcp` | stdio | All four (`publish_dataset`, `run_proven_query`, `audit_contract`, `deploy_contract`) | Claude Desktop, Claude Code, Cursor. Spawned by the host as a child process. |
-| `sxt-mcp-http` | Streamable HTTP | `run_proven_query` only (read-only) | ChatGPT Developer Mode connector, custom web-MCP clients. Self-hosted today. |
-
-`sxt-mcp-http` exposes only `run_proven_query`. Publish, deploy, and audit need credentials or filesystem access that do not belong on a network-exposed connector. Read-only proof queries do, and that narrow scope is what makes the HTTP transport safe to operate.
-
-The chat experience itself is fast once connected: roughly three seconds per query, with the proof receipt and verifier address in the response. Setup today is not seamless. ChatGPT Developer Mode requires a public HTTPS URL, which means running `sxt-mcp-http` somewhere reachable and configuring a tunnel or hosting it. The Roadmap section describes the path to a truly seamless ChatGPT experience.
-
-The MCP server is mainnet double-gated. Every chain-touching tool routes through one `selectNetwork()` chokepoint that requires both an explicit `mainnet: true` argument and `SXT_MCP_ALLOW_MAINNET=I-UNDERSTAND` set in the host environment. Neither alone reaches mainnet.
+| Available | Under maintenance |
+|---|---|
+| `dataset-publish` | `run-proven-query` |
+| `pre-deploy-audit` | `chain-data-query` |
+| `deploy-contract` | `npm run demo` / `demo:fullpipeline` |
+| `proof-of-sql-foundations` | MCP `sxt.run_proven_query` tool |
+| `generate-chain-plan.mjs` | On-chain `query()` via `query-onchain.mjs` |
 
 ---
 
@@ -83,16 +58,7 @@ node bootstrap.mjs --status
 npm run demo:fullpipeline -- --fresh --auto
 ```
 
-Final output: the membership address read from the verified callback event, four transaction hashes, and the deployed contract address.
-
-Verified end-to-end on Base mainnet 2026-05-11 against a fresh single-VARCHAR allowlist CSV. Contract [`0x8Fc04b5a628a3dbb8Da21FFc5CCc38a65c89AE05`](https://basescan.org/address/0x8Fc04b5a628a3dbb8Da21FFc5CCc38a65c89AE05). Query callback in 15.9s.
-
-Flags:
-
-- `--fresh` timestamps the namespace and clears `.deploy-state.json` so each run publishes a brand-new table and deploys a brand-new contract.
-- `--auto` skips confirmation prompts. Drop it for an interactive walk-through.
-- `--from=N` resumes after a step fails.
-- `--skip-onchain` runs steps 1 through 6 without the 100-SXT climax.
+Flags: `--fresh` publishes a brand-new table per run, `--auto` skips prompts, `--from=N` resumes after a failure, `--skip-onchain` runs steps 1–6 without the 100-SXT climax.
 
 ---
 
@@ -105,13 +71,13 @@ Eight steps, three networks, one verifiable on-chain event.
 | Publish | 1. `tables.createNamespace` + `tables.createTables` on SXT chain | `publish-dataset-cli.mjs` | <0.001 SxT chain native |
 | Publish | 2. Apache Arrow IPC encode, `indexing.submitData` | `publish-dataset-cli.mjs` | <0.001 SxT chain native |
 | Plan | 3. EVM proof plan via `commitments_v1_evmProofPlan` JSON-RPC | `save-proof-plans.mjs` | free |
-| Render | 4. Substitute proof plan and schema into the OnchainQuery template (skip if using the canonical StakersQuery contract) | `render-onchain-query.mjs` | free |
-| Audit | 5. `forge build` and manual review (slither optional) | `forge build`, `pre-deploy-audit` skill | free |
-| Deploy | 6. `forge create` on Base mainnet (StakersQuery by default) | `deploy-onchain-query.mjs` | ~0.0003 ETH |
+| Render | 4. Substitute proof plan and schema into the OnchainQuery template | `render-onchain-query.mjs` | free |
+| Audit | 5. `forge build` and manual review (slither optional) | `pre-deploy-audit` skill | free |
+| Deploy | 6. `forge create` on Base mainnet | `deploy-onchain-query.mjs` | ~0.0003 ETH |
 | Query | 7. `approve(QueryRouter, 100 SXT)`, `query()` | `query-onchain.mjs` | ~0.00005 ETH + 100 SXT |
 | Verify | 8. SXT executor proves the SQL, calls back, contract emits result event | (executor side) | included in step 7 |
 
-The QueryRouter on Base mainnet (`0x220a7036a815a1Bd4A7998fb2BCE608581fA2DbB`) verifies the proof receipt on-chain via the Base Verifier (`0x13b7463a07Aac6Bd483E4329a7F6768Da1A65518`) before invoking the callback. The resulting event is trust-minimized. The same QueryRouter address is also deployed on Ethereum mainnet (Verifier `0x55780Ba21EdFBbFEb7033a0F2FC5Cf55Cd62ACf9`) for projects targeting that network.
+The QueryRouter on Base mainnet (`0x220a7036a815a1Bd4A7998fb2BCE608581fA2DbB`) verifies the proof receipt on-chain via the Base Verifier (`0x13b7463a07Aac6Bd483E4329a7F6768Da1A65518`) before invoking the callback. The same QueryRouter address is also deployed on Ethereum mainnet (Verifier `0x55780Ba21EdFBbFEb7033a0F2FC5Cf55Cd62ACf9`).
 
 ### Architecture
 
@@ -144,22 +110,49 @@ The QueryRouter on Base mainnet (`0x220a7036a815a1Bd4A7998fb2BCE608581fA2DbB`) v
                                  event on Base
 ```
 
+Full architectural walkthrough in [`HOW_IT_WORKS.md`](./HOW_IT_WORKS.md).
+
 ---
 
-## Using the MCP server
+## Plugins + skills
 
-The package is `private: true` while the Tier 2 punch list lands (error sanitizer, structured audit log, vitest suite). Until then, build from source.
-
-```bash
-cd packages/mcp/sxt-mcp
-npm install
-npm run build
-npm run typecheck
+```
+/plugin marketplace add biffbuster/sxt-tools
+/plugin install dreamspace-data@sxt-tools
+/plugin install dreamspace-query@sxt-tools
+/plugin install dreamspace-contracts@sxt-tools
 ```
 
-### Stdio (Claude Desktop, Claude Code, Cursor)
+| Skill | Plugin | What it does |
+|---|---|---|
+| `dataset-publish` | `dreamspace-data` | Publish a CSV → SXT chain table |
+| `index-contract` | `dreamspace-data` | Register a verified EVM contract for event indexing. SCI zk-commitment is "coming soon" per SXT docs. |
+| `proof-of-sql-foundations` | `dreamspace-query` | Constraint guardrail — refuses unprovable SQL |
+| `run-proven-query` | `dreamspace-query` | Off-chain proven SELECT against any published table |
+| `chain-data-query` | `dreamspace-query` | Proven queries against SXT's pre-indexed Ethereum core (`BLOCKS`, `TRANSACTIONS`) |
+| `pre-deploy-audit` | `dreamspace-contracts` | Forge + slither audit of rendered Solidity |
+| `deploy-contract` | `dreamspace-contracts` | Deploy the proof-consuming contract to Base / Ethereum |
 
-Wire into the host's MCP config. For Claude Desktop, edit `claude_desktop_config.json`:
+Each skill is a `SKILL.md` under `packages/plugins/<plugin>/skills/<skill>/`.
+
+---
+
+## MCP server
+
+`@biffbuster/sxt-mcp` exposes four tools (`publish_dataset`, `run_proven_query`, `audit_contract`, `deploy_contract`) over two transports:
+
+| Binary | Transport | Tools | Use |
+|---|---|---|---|
+| `sxt-mcp` | stdio | All four | Claude Desktop, Claude Code, Cursor |
+| `sxt-mcp-http` | Streamable HTTP | `run_proven_query` only (read-only) | ChatGPT Developer Mode, custom web-MCP clients |
+
+The package is `private: true` while the Tier 2 punch list lands. Until then, build from source:
+
+```bash
+cd packages/mcp/sxt-mcp && npm install && npm run build
+```
+
+### Stdio config (Claude Desktop, Claude Code, Cursor)
 
 ```json
 {
@@ -176,52 +169,19 @@ Wire into the host's MCP config. For Claude Desktop, edit `claude_desktop_config
 }
 ```
 
-All four tools register on startup. The host spawns the binary on demand and pipes JSON-RPC.
+All four tools register on startup. The MCP server is mainnet-gated — every chain-touching tool requires both `mainnet: true` (per-call) and `SXT_MCP_ALLOW_MAINNET=I-UNDERSTAND` (host env). Neither alone reaches mainnet.
 
-### HTTP (ChatGPT Developer Mode, custom web-MCP clients)
-
-```bash
-node packages/mcp/sxt-mcp/dist/http.js
-# listens on http://127.0.0.1:3333/mcp
-```
-
-The HTTP entrypoint binds to loopback by default. To reach ChatGPT, expose the loopback server via a tunnel (cloudflared, ngrok) and configure a bearer:
-
-```bash
-SXT_MCP_HTTP_BEARER=<a-random-secret> \
-SXT_MCP_BIND_HOST=0.0.0.0 \
-  node packages/mcp/sxt-mcp/dist/http.js
-
-# in a second terminal
-cloudflared tunnel --url http://127.0.0.1:3333
-
-# paste the tunnel URL plus the bearer into ChatGPT > Settings > Connectors > Add
-```
-
-The HTTP entrypoint refuses to start a non-loopback bind without a bearer. Host header and Origin allowlists run before any MCP handler reaches the tool layer. Constant-time bearer comparison defeats length-leaking timing attacks. Full security model in [`packages/mcp/sxt-mcp/SAFETY.md`](packages/mcp/sxt-mcp/SAFETY.md).
-
-A hosted multi-tenant HTTP MCP, where end users sign in with their own SXT account and skip the tunnel setup entirely, is on the Roadmap.
-
-### Verification (no API spend)
-
-```bash
-cd packages/mcp/sxt-mcp
-npm run build
-node scripts/day1-smoke.mjs        # stdio: 4 protocol checks
-node scripts/day2-http-smoke.mjs   # http: 12 protocol + security checks
-```
-
-Both smoke scripts are zero-cost protocol exercises against the running server. Neither calls SXT.
+HTTP transport (ChatGPT Developer Mode), tunnel setup, and the full security model live in [`packages/mcp/sxt-mcp/README.md`](./packages/mcp/sxt-mcp/README.md) and [`packages/mcp/sxt-mcp/SAFETY.md`](./packages/mcp/sxt-mcp/SAFETY.md).
 
 ---
 
-## Use a different CSV
+## Using your own data
 
-Same scripts, different inputs. **Zero env-var retyping between steps** — every step after `publish` auto-picks up the active dataset via a cross-skill handoff file. The namespace prefix you pick on first publish is remembered for subsequent publishes too.
+Every step after `publish` auto-picks up the active dataset via `examples/data/.last-publish.json` (gitignored — carries the publisher's wallet hex). Resolution order in every downstream script: explicit env var → handoff file → canonical demo defaults.
 
 ### First publish — pick a namespace prefix
 
-Pick any `UPPERCASE_SNAKE_CASE` prefix that scopes your project (`ACME_PROJECT`, `MEMBERSHIP_V1`, etc.). The chain auto-appends your wallet hex so prefixes never collide across forks — every forked user effectively gets their own private namespace under the prefix they chose.
+Pick any `UPPERCASE_SNAKE_CASE` prefix that scopes your project (`ACME_PROJECT`, `MEMBERSHIP_V1`, etc.). The chain auto-appends your wallet hex so prefixes never collide across forks.
 
 ```bash
 node publish-dataset-cli.mjs \
@@ -230,129 +190,33 @@ node publish-dataset-cli.mjs \
   --lookup-column <YOUR_LOOKUP_COL>     # optional — pins the membership-proof column
 ```
 
-`<YOUR_PROJECT>` is yours to choose. `<YOUR_TABLE>` is `UPPERCASE_SNAKE_CASE` for the dataset (e.g. `VALIDATORS`).
-
 ### Subsequent steps — zero arguments
 
-Each script reads `examples/data/.last-publish.json` (written by step 1) to discover the table reference, schema path, lookup column, and the prefix to keep using.
+Each script reads `.last-publish.json` to discover the table reference, schema, lookup column, and prefix.
 
 ```bash
-# 2. Generate proof plans (writes to proof-plans/<table-slug>/)
-node save-proof-plans.mjs
-
-# 3. Off-chain pre-flight — verifies the HyperKZG proof locally in ~1s.
-#    Free apart from one API quota tick. ALWAYS run this before step 5.
-node verify-stakers.mjs
-
-# 4. Render a typed Solidity contract for your column projection.
+node save-proof-plans.mjs              # generate proof plans
+node verify-table.mjs                   # off-chain pre-flight (free, ~1s)
 node render-onchain-query.mjs --name MyQuery
-
-# 5. Build, deploy, query (the on-chain climax — costs ~$0.50 ETH + 100 SXT)
 cd ../contracts/sxt-onchain-query && forge build && cd ../../scripts
 node deploy-onchain-query.mjs
-node query-onchain.mjs
+node query-onchain.mjs                  # on-chain climax — ~$0.50 ETH + 100 SXT
 ```
 
-### Subsequent publishes — prefix is remembered
-
-When you publish a *second* CSV from the same clone, you don't need to retype the prefix. The CLI reads the handoff and reuses what you picked the first time. The table portion is auto-derived from the CSV filename:
-
-```bash
-# .last-publish.json already records prefix "ACME_PROJECT" from the first run.
-node publish-dataset-cli.mjs ../data/drainers.csv --lookup-column ADDRESS
-# → publishes as ACME_PROJECT.DRAINERS
-```
-
-Switch to a different namespace mid-project by passing a fresh `PREFIX.TABLE` explicitly. Override any handoff field per-run via `SXT_TABLE` / `SXT_SCHEMA_PATH` / `SXT_LOOKUP_COLUMN` / `SXT_POINT_LOOKUP`.
-
-A successful `verify-stakers.mjs` response (HyperKZG proof returned in ~1s) means the on-chain `query()` is mathematically guaranteed to fulfill — they share a prover backend. A 422 *"does not exist in source network MAINNET"* means the table is not promoted into the indexer; the cause is almost always a `PRIMARY KEY` clause in the original DDL (this CLI never emits one — see Troubleshooting).
+A successful `verify-table.mjs` (HyperKZG proof returned in ~1s) means the on-chain `query()` is mathematically guaranteed to fulfill — they share a prover backend. A 422 *"does not exist in source network MAINNET"* means the table is not promoted into the indexer; the cause is almost always a `PRIMARY KEY` clause in the original DDL (the CLI in this repo never emits one — see Troubleshooting).
 
 The renderer maps SQL types (`VARCHAR`, `BIGINT`, `BOOLEAN`, `TIMESTAMP`, `INT`, `BINARY`, `TINYINT`, `SMALLINT`) to the appropriate `ProofOfSqlTable` reader and emits a `QueryRow` event with one parameter per projected column.
 
-### How the handoff works
+### Subsequent publishes — prefix is remembered
 
-`publish-dataset-cli.mjs` writes `examples/data/.last-publish.json` after every successful publish:
+Second CSV from the same clone reuses the prefix from `.last-publish.json`. Table portion auto-derives from the CSV filename:
 
-```json
-{
-  "tableRef":     "<YOUR_PROJECT>_<UPPERCASE_HEX>.<YOUR_TABLE>",
-  "prefix":       "<YOUR_PROJECT>",
-  "csvPath":      "/abs/path/to/your.csv",
-  "schemaPath":   "/abs/path/to/your.inferred-schema.json",
-  "lookupColumn": "<YOUR_LOOKUP_COL>",
-  "wallet":       "0x...",
-  "publishedAt":  "..."
-}
+```bash
+node publish-dataset-cli.mjs ../data/drainers.csv --lookup-column ADDRESS
+# → publishes as <YOUR_PREFIX>.DRAINERS (using the prefix from the first run)
 ```
 
-The file is **per-local-clone and gitignored** (it carries the publisher's wallet hex). Resolution order in every downstream script: explicit env var → `.last-publish.json` → legacy canonical-demo defaults. This is what lets a forked user run the pipeline against their own dataset, under their own chosen namespace, with no copy-paste between steps.
-
-> Verified live on Base mainnet 2026-05-04. A 2,062-row CSV published to SXT chain, deployed as `OnchainQuery.sol` at [`0x1fc02a8dc0A4050B2DA5D075838F37705fcF0Aa1`](https://basescan.org/address/0x1fc02a8dc0A4050B2DA5D075838F37705fcF0Aa1), queried via `IQueryRouter.requestQuery`. The SXT executor fulfilled the proof in 3 blocks (~6 s). Callback transaction: [`0xd702a4014ec5258a032b39bf9dcfceea838aed51c519d9285f463c1eb23e25b0`](https://basescan.org/tx/0xd702a4014ec5258a032b39bf9dcfceea838aed51c519d9285f463c1eb23e25b0).
->
-> For the architectural walkthrough of how an agent orchestrates the five skills end-to-end, including a sample conversation that takes a CSV to a verified Base event in three prompts, see [`HOW_IT_WORKS.md`](./HOW_IT_WORKS.md).
-
----
-
-## Prerequisites
-
-- Node.js >= 18
-- Foundry: `curl -L https://foundry.paradigm.xyz | bash && foundryup`
-- A wallet funded on three networks (see Quickstart step 3). `bootstrap.mjs --status` reports exact shortfalls.
-
-Optional:
-
-- `slither` (`pip install slither-analyzer`) for the audit skill's Phase 1 static analysis.
-- `ETHERSCAN_API_KEY` for source verification on deploy.
-
----
-
-## Reference
-
-### Skills
-
-| Skill | Plugin | Pipeline step |
-|---|---|---|
-| `dataset-publish` | `dreamspace-data` | Steps 1 and 2 (publish, insert) — for your own CSVs |
-| `proof-of-sql-foundations` | `dreamspace-query` | Constraint guardrail used during step 3 |
-| `run-proven-query` | `dreamspace-query` | Off-chain bridge for step 3 (covers step 7 callback decoding patterns) |
-| `chain-data-query` | `dreamspace-query` | Skip publish — query SXT's zk-committed Ethereum index directly (ETHEREUM.BLOCKS / ETHEREUM.TRANSACTIONS). Generates parameterized proof plans for trust-minimized L1 → L2 primitives. |
-| `pre-deploy-audit` | `dreamspace-contracts` | Step 5 |
-| `deploy-contract` | `dreamspace-contracts` | Step 6 |
-
-Each skill is one SKILL.md with YAML frontmatter under `packages/plugins/<plugin>/skills/<skill>/`.
-
-### MCP tools
-
-| Tool | Where it lives | Cost surface |
-|---|---|---|
-| `sxt.publish_dataset` | stdio only | SXT chain credits (per row) |
-| `sxt.run_proven_query` | stdio and HTTP | One `/v1/zkquery` API quota tick |
-| `sxt.audit_contract` | stdio only | None (pure local forge + slither) |
-| `sxt.deploy_contract` | stdio only | ~$0.50 ETH gas |
-
-### Contracts
-
-Under `examples/contracts/sxt-onchain-query/src/`:
-
-| Contract | Source | Use |
-|---|---|---|
-| `StakersQuery.sol` | hand-curated, semantic events (`MembershipProven`, `MembershipNotFound`) | Canonical reference for the demo. Audit-clean. Single-purpose membership-proof contract. |
-| `OnchainQuery.sol` | rendered from `templates/OnchainQuery.sol.template` by `render-onchain-query.mjs` | Generic. Same pattern, parameterised by SQL column types. Generated for any user table and any SELECT projection. |
-
-The deploy and query scripts target whichever contract was last rendered (via `.last-rendered.json`). When no render has been done they default to `StakersQuery` so the canonical demo runs out-of-the-box.
-
-### Live mainnet addresses
-
-| Artifact | Address |
-|---|---|
-| QueryRouter (Base + Ethereum) | `0x220a7036a815a1Bd4A7998fb2BCE608581fA2DbB` |
-| Verifier (Base) | `0x13b7463a07Aac6Bd483E4329a7F6768Da1A65518` |
-| Verifier (Ethereum) | `0x55780Ba21EdFBbFEb7033a0F2FC5Cf55Cd62ACf9` |
-| SXT ERC-20 (Base) | `0xA2c22252cDc8b7cDdEe1B0b2E242818509fCf7b8` |
-| SXT ERC-20 (Ethereum) | `0xE6Bfd33F52d82Ccb5b37E16D3dD81f9FFDAbB195` |
-| SXTChainFunding (Ethereum) | `0xb1bc1d7eb1e6c65d0de909d8b4f27561ef568199` |
-| Canonical demo table (SXT mainnet) | `MY_AUDIT_V2_5731EC0BBEB5F7BCAA2E4BAF3179A7A4C59C2552.STAKERS` |
-| Sample wallet present in demo table | `0x6de6e901bbefd26a9888798a25e4a49309d04ca9` |
+Override any handoff field per-run via `SXT_TABLE` / `SXT_SCHEMA_PATH` / `SXT_LOOKUP_COLUMN` / `SXT_POINT_LOOKUP`.
 
 ---
 
@@ -362,89 +226,59 @@ Once the pipeline runs end-to-end, the result is a Base-mainnet transaction whos
 
 1. Open the most recent `query()` callback transaction on BaseScan.
 2. Find the `MembershipProven` event (for `StakersQuery`) or `QueryRow` event (for `OnchainQuery`) in the log.
-3. The event's argument is the staker address that the SXT executor proved is in your published table. The on-chain Verifier validated the proof in 150K gas inside QueryRouter; the result reached your contract via callback. No trust assumption in SXT, the API, or the publishing wallet, only the chain.
+3. The event's argument is the value the SXT executor proved is in your published table. The on-chain Verifier validated the proof in ~150K gas inside QueryRouter; the result reached your contract via callback. No trust assumption in SXT, the API, or the publishing wallet — only the chain.
 
 Negative membership produces `MembershipNotFound` or `QueryEmpty`. The proof is equally cryptographic in both cases.
 
 ---
 
+## Prerequisites
+
+- Node.js >= 18
+- Foundry: `curl -L https://foundry.paradigm.xyz | bash && foundryup`
+- A wallet funded on three networks. `bootstrap.mjs --status` reports exact shortfalls.
+- Optional: `slither` (`pip install slither-analyzer`) for the audit skill, `ETHERSCAN_API_KEY` for deploy verification.
+
+---
+
+## Live mainnet addresses
+
+| Artifact | Address |
+|---|---|
+| QueryRouter (Base + Ethereum) | `0x220a7036a815a1Bd4A7998fb2BCE608581fA2DbB` |
+| Verifier (Base) | `0x13b7463a07Aac6Bd483E4329a7F6768Da1A65518` |
+| Verifier (Ethereum) | `0x55780Ba21EdFBbFEb7033a0F2FC5Cf55Cd62ACf9` |
+| SXT ERC-20 (Base) | `0xA2c22252cDc8b7cDdEe1B0b2E242818509fCf7b8` |
+| SXT ERC-20 (Ethereum) | `0xE6Bfd33F52d82Ccb5b37E16D3dD81f9FFDAbB195` |
+| SXTChainFunding (Ethereum) | `0xb1bc1d7eb1e6c65d0de909d8b4f27561ef568199` |
+| Canonical demo table | `MY_AUDIT_V2_5731EC0BBEB5F7BCAA2E4BAF3179A7A4C59C2552.STAKERS` |
+| Sample wallet in demo table | `0x6de6e901bbefd26a9888798a25e4a49309d04ca9` |
+
+---
+
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| `1010: Inability to pay some fees` on publish | SxT chain native balance is 0 | Fund via `SXTChainFunding` mainnet contract |
-| `save-proof-plans.mjs` returns no `proofPlan` | Table not yet propagated, or namespace casing mismatch | Wait 30s after publish and retry |
-| `forge build` fails with "Identifier already declared" | `sxt-proof-of-sql-sdk` npm version conflict (pin v0.54.0) | `forge clean && forge soldeer install` |
-| `query-onchain.mjs` times out at 1 hour with no callback while `check-executor-activity.mjs` shows the executor fulfilling other queries on Base | Table never landed in the dreamspace MAINNET catalog. Most common cause: a `PRIMARY KEY` clause in the original CREATE TABLE. SXT chain accepts the DDL and rows ingest, but the indexer skips promoting the table to MAINNET. The on-chain executor and `/v1/zkquery` REST prover both look in MAINNET only. Silent skip. | Republish under a new namespace using the current `publish-dataset-cli.mjs` (which never emits PK). Recover stuck SXT via `cancelQuery(queryId, payment)` on QueryRouter. `inspect-query.mjs` decodes the original `QueryRequested` event so you have the exact `Payment` struct to pass back. |
-| `/v1/zkquery` returns `422 "does not exist in source network MAINNET"` | Same root cause as the timeout above. This is the cheap pre-flight reproduction (zero SXT). | Republish without PRIMARY KEY. |
-| `/v1/zkquery` returns `400 "source network 'X' is not supported"` | A `sourceNetwork` value other than the literal `"MAINNET"` was passed | Only `"MAINNET"` (uppercase, case-sensitive) is accepted, even for user-published Community-tier tables. |
-| `401 SECURITY: Invalid JWT` on any `api.makeinfinite.dev` REST call | Raw `SXT_API_KEY` sent as Bearer, or the JWT expired (25-min lifetime) | Exchange API key first. POST `proxy.api.makeinfinite.dev/auth/apikey` with header `apikey: <key>`, use the returned `accessToken` as Bearer. The SXT SDK and the scripts in this repo handle this automatically. See `examples/scripts/verify-stakers.mjs` for the canonical pattern. |
-| Deploy reverts with insufficient funds | Wallet has < ~0.001 ETH on Base | Top up. Bridge ETH to Base via bridge.base.org. |
-| Skill doesn't auto-activate | Phrasing didn't match the trigger | Use direct invocation: `/<plugin>:<skill>` |
-| Table appears in `chain.spaceandtime.io` with rows but not in `dreamspace.xyz/queries/new` Studio | Two distinct registries. chain.spaceandtime.io reads chain commitment storage directly; dreamspace.xyz reads an indexed catalog that the chain indexer populates only for tables that pass its gates (NOT NULL only, no PK). | Same fix as the timeout row above. Republish without PRIMARY KEY. |
-
----
-
-## Repo layout
-
-```
-.
-├── .claude-plugin/marketplace.json     marketplace manifest (3 plugins)
-├── packages/
-│   ├── plugins/                        the 5 skills
-│   │   ├── dreamspace-data/skills/dataset-publish/
-│   │   ├── dreamspace-query/skills/proof-of-sql-foundations/
-│   │   ├── dreamspace-query/skills/run-proven-query/
-│   │   └── dreamspace-contracts/skills/{deploy-contract,pre-deploy-audit}/
-│   └── mcp/sxt-mcp/                    the MCP server
-│       ├── src/index.ts                stdio entrypoint
-│       ├── src/http.ts                 HTTP entrypoint (read-only)
-│       ├── src/server.ts               buildServer() factory
-│       ├── src/lib/network.ts          mainnet double-gate
-│       ├── src/lib/logger.ts           level-gated logger with secret redaction
-│       ├── src/tools/*.ts              one file per tool handler
-│       ├── scripts/day1-smoke.mjs      stdio protocol smoke
-│       ├── scripts/day2-http-smoke.mjs HTTP protocol + security smoke
-│       └── SAFETY.md                   engineering protocol and security model
-├── examples/
-│   ├── data/
-│   │   ├── sxt_stakers.csv             demo dataset (2,062 staker addrs)
-│   │   ├── sxt_stakers.schema.json
-│   │   └── proof-plans/                EVM proof plan artifacts (JSON)
-│   ├── contracts/sxt-onchain-query/    foundry project
-│   │   ├── src/StakersQuery/           hand-curated demo contract
-│   │   ├── src/OnchainQuery/           generated by render-onchain-query.mjs
-│   │   ├── templates/                  generic contract template
-│   │   ├── AUDIT_REPORT.md
-│   │   ├── foundry.toml + soldeer.lock
-│   │   └── (out/, cache/, dependencies/  gitignored build artifacts)
-│   └── scripts/                        bootstrap and the 8-step pipeline
-└── src/app/                            docs site (Next.js, /docs/quick-start)
-```
-
-The web docs render at `npm run dev`, then http://localhost:3000/docs.
-
----
-
-## Roadmap
-
-**Tier 1 (today).** Three plugins on the marketplace. MCP server with stdio (all four tools) and HTTP (read-only). Mainnet double-gate. Canonical demo table on SXT mainnet. StakersQuery contract on Base mainnet. Verified end-to-end against fresh tables.
-
-**Tier 2 (in flight, roughly one week).** Publish `@biffbuster/sxt-mcp` to npm. Outstanding items: error-message sanitizer (strip absolute paths from echoed errors), structured per-call audit log, vitest suite replacing the smoke scripts. None of these block functionality; they are the polish required to lift `private: true`. After Tier 2, installing the MCP server is `npm install`, not build-from-source.
-
-**Tier 3 (roadmap, gated on SXT partnership).** Hosted multi-tenant HTTP MCP, where ChatGPT users sign in with their own SXT account and skip the tunnel setup entirely. This is the truly seamless ChatGPT path. It depends on coordination with the SXT team for per-key rate limits, an OAuth-to-SXT-API-key flow (which does not exist in SXT's public surface today), and a decision about who operates the hosted service. Out of scope until Tier 2 is approved and a partnership conversation is open.
+| Symptom | Fix |
+|---|---|
+| `1010: Inability to pay some fees` on publish | Fund SXT chain native via `SXTChainFunding` on Ethereum mainnet |
+| `query-onchain.mjs` times out at 1 hour, no callback | Table never landed in MAINNET catalog — almost always a `PRIMARY KEY` clause in the original DDL. Republish under a new namespace (the CLI here never emits PK). Recover stuck SXT via `cancelQuery(queryId, payment)` — `inspect-query.mjs` decodes the original `Payment` struct. |
+| `/v1/zkquery` returns `422 "does not exist in source network MAINNET"` | Same as above — republish without `PRIMARY KEY` (cheap pre-flight reproduction) |
+| `/v1/zkquery` returns `400 "source network 'X' is not supported"` | Only the literal `"MAINNET"` (uppercase) is accepted, even for user-published tables |
+| `401 SECURITY: Invalid JWT` | Exchange the API key first via `proxy.api.makeinfinite.dev/auth/apikey`; the repo scripts handle this automatically |
+| `forge build` fails with "Identifier already declared" | `forge clean && forge soldeer install` |
+| Deploy reverts with insufficient funds | Top up Base ETH via bridge.base.org |
+| Table appears on `chain.spaceandtime.io` but not on `dreamspace.xyz` | Two distinct registries. The indexer skips PK-having tables. Republish without `PRIMARY KEY`. |
 
 ---
 
 ## References
 
-- [`docs.spaceandtime.io`](https://docs.spaceandtime.io)
-- [Quick intro to Space and Time](https://docs.spaceandtime.io/docs/what-is-space-and-time-quick-intro)
-- [Creating tables (DDL)](https://docs.spaceandtime.io/docs/creating-tables-ddl-1)
-- [Queries from a smart contract (ZK SQL onchain)](https://docs.spaceandtime.io/docs/queries-from-a-smart-contract-zk-sql-onchain)
-- [ZK SQL via smart contracts](https://docs.spaceandtime.io/docs/zk-sql-via-smart-contracts)
-- [ZK-Proven SQL queries (technical)](https://docs.spaceandtime.io/docs/zk-proven-sql-queries-technical)
-- [`spaceandtimefdn/sxt-chain-examples`](https://github.com/spaceandtimefdn/sxt-chain-examples) (canonical examples this repo mirrors)
+- [Space and Time docs](https://docs.spaceandtime.io)
+- [`spaceandtimefdn/sxt-chain-examples`](https://github.com/spaceandtimefdn/sxt-chain-examples) — canonical examples this repo mirrors
+- [`spaceandtimefdn/sxt-proof-of-sql-sdk`](https://github.com/spaceandtimefdn/sxt-proof-of-sql-sdk) — the SDK this repo wraps
+- [`HOW_IT_WORKS.md`](./HOW_IT_WORKS.md) — architecture deep-dive
+- [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contributor guide
+- [`SECURITY.md`](./SECURITY.md) — security policy
 
 ---
 

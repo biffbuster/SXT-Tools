@@ -1,4 +1,4 @@
-# Example scripts
+ Example scripts
 
 Vanilla Node.js scripts that drive the publish-and-prove pipeline against Space and Time mainnet (SXT chain) and Base mainnet (EVM). Reproducible end-to-end from a fresh clone — see the root [`README.md`](../../README.md) for the five-command quickstart.
 
@@ -49,7 +49,7 @@ For cases where you want to validate the publish + plan steps without spending 1
 | Script | Purpose |
 |---|---|
 | `audit-with-sxt.mjs` | REST API version of the audit cross-reference. Computes a contract bytecode hash and queries the published `KNOWN_EXPLOITS` table via the Studio REST API. Requires `SXT_API_KEY` from `app.spaceandtime.ai`. |
-| `verify-stakers.mjs` | REST API version of the membership query. Same proof, delivered as a JSON receipt instead of an on-chain event. Requires `SXT_API_KEY`. |
+| `verify-table.mjs` | REST API version of the membership query. Same proof, delivered as a JSON receipt instead of an on-chain event. Requires `SXT_API_KEY`. |
 
 ## Configuration
 
@@ -58,7 +58,7 @@ All scripts read from `.env` (gitignored). The full set of variables:
 | Variable | Used by | Default |
 |---|---|---|
 | `PRIVATE_KEY` | all on-chain scripts | (required) |
-| `SXT_API_KEY` | `audit-with-sxt.mjs`, `verify-stakers.mjs` | (required for off-chain scripts only) |
+| `SXT_API_KEY` | `audit-with-sxt.mjs`, `verify-table.mjs` | (required for off-chain scripts only) |
 | `SXT_RPC` | publish, balance, proof-plan scripts | `wss://rpc.mainnet.sxt.network` |
 | `ETH_RPC` | deploy, query, balance, poll, inspect | `https://base.publicnode.com` |
 | `MAX_WAIT_MS` | `query-onchain.mjs`, `poll-callback.mjs` | `180000` (3 minutes) |

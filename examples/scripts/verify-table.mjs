@@ -11,7 +11,7 @@
  * has baked into its QUERY_PLAN). For arbitrary community CSVs:
  *   1. publish-dataset-cli.mjs → writes table + inferred-schema.json
  *   2. save-proof-plans.mjs    → writes proof plans (schema-aware SQL)
- *   3. verify-stakers.mjs      → this script; reads each plan's SQL, runs it
+ *   3. verify-table.mjs        → this script; reads each plan's SQL, runs it
  *
  * Env:
  *   SXT_API_KEY    Studio API key (app.spaceandtime.ai → API Authentication).

@@ -1,4 +1,4 @@
-# Engineering protocol
+ Engineering protocol
 
 This document defines how `sxt-mcp` is built and shipped. The defaults below
 are derived from the operational rules in the root `CLAUDE.md` and from the
@@ -56,7 +56,7 @@ The CLI scripts in `examples/scripts/` default to mainnet because they're operat
 Two env vars carry through from the host config:
 
 - **`PRIVATE_KEY`**. Ethereum private key, `0x`-prefixed. Used by both the SXT EthEcdsa signer (publish flow) and EVM tools (deploy and contract calls). Same name as the existing scripts.
-- **`SXT_API_KEY`** (alias `MAKEINFINITE_API_KEY`). Studio API key. The server exchanges it for a 25-minute JWT at `/auth/apikey` before each prover call, matching the pattern in `verify-stakers.mjs`.
+- **`SXT_API_KEY`** (alias `MAKEINFINITE_API_KEY`). Studio API key. The server exchanges it for a 25-minute JWT at `/auth/apikey` before each prover call, matching the pattern in `verify-table.mjs`.
 
 Both are validated **lazily**. The server starts and lists tools regardless
 of whether credentials are set. Validation happens inside the handler when
