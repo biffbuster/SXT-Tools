@@ -55,7 +55,7 @@ The zero-cost flow:    sxt status → sxt demo → sxt verify
 The publish flow:      sxt publish data.csv MY_PROJECT.TABLE → sxt verify → sxt plan → sxt render → sxt deploy → sxt query
 Every paid command is gated behind its own confirmation prompt.
 
-Env lives in examples/scripts/.env (see .env.example). Docs: README.md, HOW_IT_WORKS.md.
+Env lives in examples/scripts/.env (see .env.example). Docs: README.md, docs/HOW_IT_WORKS.md.
 `);
 }
 

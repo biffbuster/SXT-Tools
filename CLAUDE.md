@@ -2,7 +2,7 @@
 
 You are Claude Code working inside the **sxt-tools** repository: a Claude Code marketplace shipping three plugins (`dreamspace-data`, `dreamspace-query`, `dreamspace-contracts`) and seven skills that take a CSV or a verified EVM smart contract (or SXT-indexed Ethereum chain data) from a local folder to a verifiable Proof-of-SQL event on Base mainnet via Space and Time chain.
 
-This file captures the load-bearing rules for working *inside* this codebase. The human-facing documentation is in [`README.md`](./README.md) (overview/quickstart) and [`HOW_IT_WORKS.md`](./HOW_IT_WORKS.md) (architecture). Read those before responding to onboarding questions; read this file before *modifying* anything.
+This file captures the load-bearing rules for working *inside* this codebase. The human-facing documentation is in [`README.md`](./README.md) (overview/quickstart) and [`HOW_IT_WORKS.md`](./docs/HOW_IT_WORKS.md) (architecture). Read those before responding to onboarding questions; read this file before *modifying* anything.
 
 ---
 

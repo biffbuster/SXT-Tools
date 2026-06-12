@@ -2,7 +2,7 @@
 
 Three Claude Code plugins shipping seven skills for the Space and Time stack. Each plugin installs independently; the skills compose freely.
 
-For the full overview, quickstart, troubleshooting, and architecture, see [`README.md`](../../README.md) and [`HOW_IT_WORKS.md`](../../HOW_IT_WORKS.md) at the repo root.
+For the full overview, quickstart, troubleshooting, and architecture, see [`README.md`](../../README.md) and [`HOW_IT_WORKS.md`](../../docs/HOW_IT_WORKS.md) at the repo root.
 
 ## Layout
 

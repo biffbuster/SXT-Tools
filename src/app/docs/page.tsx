@@ -446,7 +446,7 @@ export default function DocsPage() {
           <li>
             Architecture deep dive:{" "}
             <a
-              href="https://github.com/biffbuster/sxt-tools/blob/main/HOW_IT_WORKS.md"
+              href="https://github.com/biffbuster/sxt-tools/blob/main/docs/HOW_IT_WORKS.md"
               target="_blank"
               rel="noopener noreferrer"
             >

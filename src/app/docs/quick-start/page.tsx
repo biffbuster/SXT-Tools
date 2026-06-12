@@ -202,7 +202,7 @@ Report verified=true/false for each.`}</code></pre>
         <li>The seven skills with trigger phrases and refusal rules: <Link href="/docs">Skills catalog</Link></li>
         <li>MCP server tools, transport, and roadmap: <Link href="/docs/mcp">MCP integration</Link></li>
         <li>Protocol primitives (Proof of SQL, QueryRouter, Verifier): <Link href="/docs/space-and-time">Space and Time primitives</Link></li>
-        <li>Architecture deep-dive: <a href="https://github.com/biffbuster/sxt-tools/blob/main/HOW_IT_WORKS.md" target="_blank" rel="noopener noreferrer">HOW_IT_WORKS.md</a></li>
+        <li>Architecture deep-dive: <a href="https://github.com/biffbuster/sxt-tools/blob/main/docs/HOW_IT_WORKS.md" target="_blank" rel="noopener noreferrer">HOW_IT_WORKS.md</a></li>
       </ul>
     </>
   );

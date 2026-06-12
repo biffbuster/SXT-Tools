@@ -4,7 +4,7 @@ Proof of SQL tooling for Space and Time. Publish data, register contracts for in
 
 ![version](https://img.shields.io/badge/version-0.2.0--beta.1-blue) ![node](https://img.shields.io/badge/node-%3E%3D20-brightgreen) ![license](https://img.shields.io/badge/license-MIT-lightgrey) ![platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows-informational)
 
-> Community-built, powered by Space and Time's public infrastructure. Not officially endorsed by Space and Time. Every command, cost, and limitation in this document was verified live on mainnet, most recently 2026-06-11 ([evidence](./CHANGELOG.md)). Reviewing this repo? Start at [`REVIEW.md`](./REVIEW.md).
+> Community-built, powered by Space and Time's public infrastructure. Not officially endorsed by Space and Time. Every command, cost, and limitation in this document was verified live on mainnet, most recently 2026-06-11 ([evidence](./CHANGELOG.md)). Reviewing this repo? Start at [`REVIEW.md`](./docs/REVIEW.md).
 
 ```
 $ sxt query
@@ -234,7 +234,7 @@ The MCP server (`packages/mcp/sxt-mcp/`, stdio plus read-only HTTP) exposes `pub
                                         (the cryptographic receipt)
 ```
 
-Deep-dive: [`HOW_IT_WORKS.md`](./HOW_IT_WORKS.md). Doc-conformance audit with live-chain evidence: [`docs-conformance.md`](./docs-conformance.md).
+Deep-dive: [`HOW_IT_WORKS.md`](./docs/HOW_IT_WORKS.md). Doc-conformance audit with live-chain evidence: [`docs-conformance.md`](./docs/docs-conformance.md).
 
 ---
 
@@ -270,8 +270,8 @@ Deep-dive: [`HOW_IT_WORKS.md`](./HOW_IT_WORKS.md). Doc-conformance audit with li
 
 ## For reviewers and contributors
 
-- [`REVIEW.md`](./REVIEW.md): end-to-end walkthrough, every feature tested via CLI with expected outputs, exact costs, and the mainnet evidence from our own runs.
-- [`BETA.md`](./BETA.md): beta onboarding plus the GA promotion checklist.
+- [`REVIEW.md`](./docs/REVIEW.md): end-to-end walkthrough, every feature tested via CLI with expected outputs, exact costs, and the mainnet evidence from our own runs.
+- [`BETA.md`](./docs/BETA.md): beta onboarding plus the GA promotion checklist.
 - [`CHANGELOG.md`](./CHANGELOG.md): versioned history with verification evidence.
 - [`CONTRIBUTING.md`](./CONTRIBUTING.md) · [`SECURITY.md`](./SECURITY.md)
 - Verification suite: `sxt preflight` (21 checks), `node --check` over all scripts, `forge build`, `sxt parity`.
