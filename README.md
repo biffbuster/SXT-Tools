@@ -1,8 +1,10 @@
 # sxt — a Proof of SQL CLI for Space and Time
 
+![version](https://img.shields.io/badge/version-0.2.0--beta.1-blue) ![node](https://img.shields.io/badge/node-%3E%3D20-brightgreen) ![license](https://img.shields.io/badge/license-MIT-lightgrey) ![platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows-informational)
+
 Publish data, register contracts for indexing, and run **cryptographically proven SQL** — off-chain in seconds, or delivered to your smart contract on Base with on-chain verification (~150K gas).
 
-> **Community-built** on public Space and Time protocol surfaces. Not endorsed or supported by Space and Time. Every command, cost, and limitation in this document was verified live on mainnet — most recently 2026-06-11 ([evidence](./CHANGELOG.md)). Reviewing for sign-off? Start at [`REVIEW.md`](./REVIEW.md).
+> **Community-built, powered by Space and Time's public infrastructure** — not officially endorsed by Space and Time. Every command, cost, and limitation in this document was verified live on mainnet — most recently 2026-06-11 ([evidence](./CHANGELOG.md)). Reviewing this repo? Start at [`REVIEW.md`](./REVIEW.md).
 
 ```
 $ sxt query
@@ -22,8 +24,8 @@ Verdict: 1 verified row(s) returned for the proven query.
 |---|---|---|
 | Prove a row exists (or doesn't) in your own published dataset — off-chain, free | `sxt publish` → `sxt verify` | ✅ |
 | Deliver that proof to a smart contract on Base (trustless oracle) | `sxt plan` → `sxt render` → `sxt deploy` → `sxt query` | ✅ battle-tested |
-| Prove Ethereum chain facts (wallet activity, tx existence, block finality) | `sxt chain-plan` → render → deploy → query | ✅ off-chain proofs + plan/render/compile verified on `ETHEREUM.BLOCKS` / `TRANSACTIONS`; on-chain parameterized callback pending first run |
-| Register any EVM contract so SXT indexes its events into tables | `sxt index` | ✅ registration; proofs against SCI tables pending SXT |
+| Prove Ethereum chain facts (wallet activity, tx existence, block finality) | `sxt chain-plan` → render → deploy → query | ✅ on `ETHEREUM.BLOCKS` / `TRANSACTIONS` (on-chain parameterized callback pending first run) |
+| Register any EVM contract so SXT indexes its events into tables | `sxt index` | ✅ registration live; proofs against SCI tables pending SXT |
 
 ---
 
@@ -41,7 +43,9 @@ cp .env.example .env
 sxt preflight     # validates the install end-to-end
 ```
 
-Works identically on macOS, Linux, and Windows (developed and battle-tested on Windows; LF line endings enforced repo-wide via `.gitattributes` so the `sxt` bin shebang survives every platform). **Windows note:** examples written as `SXT_RPC=… sxt <cmd>` use Unix shell syntax — in PowerShell set the variable first: `$env:SXT_RPC='…'; sxt <cmd>`.
+Works identically on macOS, Linux, and Windows.
+
+> **Windows note:** examples written as `SXT_RPC=… sxt <cmd>` use Unix shell syntax — in PowerShell, set the variable first: `$env:SXT_RPC='…'; sxt <cmd>`.
 
 ---
 
@@ -107,7 +111,7 @@ sxt render
 cd ../contracts/sxt-onchain-query && forge build && cd ../../scripts
 sxt deploy
 
-# 4. The climax: 100 SXT, proof verified on-chain, callback fires (~8s observed)
+# 4. On-chain query: 100 SXT, proof verified on-chain, callback fires (~8s observed)
 sxt query
 ```
 
@@ -168,7 +172,7 @@ The CLI submits the same `tables.createTableWithSciMetadata` extrinsic the SXT S
 
 | Action | Cost | How we know |
 |---|---|---|
-| Off-chain proven query | free (API quota) | run continuously |
+| Off-chain proven query | free (API quota) | verified continuously |
 | Create namespace | 20 SXT **burned** | pallet source + live `FundsUnavailable` |
 | Create table (CSV or SCI) | 20 SXT **burned** each | balance delta measured: 20.075 SXT incl. fees |
 | Insert rows into existing table | ~0.001 SXT | live publishes |
