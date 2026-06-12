@@ -15,6 +15,9 @@
     "publish": "node publish-dataset-cli.mjs",
     "audit": "node audit-with-sxt.mjs"
   },
+  "overrides": {
+    "ws": "^8.18.0"
+  },
   "dependencies": {
     "@polkadot/api": "^11.0.0",
     "@polkadot/keyring": "^12.0.0",

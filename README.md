@@ -273,7 +273,7 @@ Deep-dive: [`HOW_IT_WORKS.md`](./docs/HOW_IT_WORKS.md). Doc-conformance audit wi
 - [`REVIEW.md`](./docs/REVIEW.md): end-to-end walkthrough, every feature tested via CLI with expected outputs, exact costs, and the mainnet evidence from our own runs.
 - [`BETA.md`](./docs/BETA.md): beta onboarding plus the GA promotion checklist.
 - [`CHANGELOG.md`](./CHANGELOG.md): versioned history with verification evidence.
-- [`CONTRIBUTING.md`](./CONTRIBUTING.md) · [`SECURITY.md`](./SECURITY.md)
+- [`CONTRIBUTING.md`](./.github/CONTRIBUTING.md) · [`SECURITY.md`](./.github/SECURITY.md)
 - Verification suite: `sxt preflight` (21 checks), `node --check` over all scripts, `forge build`, `sxt parity`.
 
 ## References
