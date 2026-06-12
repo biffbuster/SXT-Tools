@@ -18,14 +18,20 @@ QueryRow  0x6de6e901bbefd26a9888798a25e4a49309d04ca9
 Verdict: 1 verified row(s) returned for the proven query.
 ```
 
-## What you can do
+## Why this matters
 
-| Use case | Commands | Works today |
-|---|---|---|
-| Prove a row exists (or doesn't) in your own published dataset — off-chain, free | `sxt publish` → `sxt verify` | ✅ |
-| Deliver that proof to a smart contract on Base (trustless oracle) | `sxt plan` → `sxt render` → `sxt deploy` → `sxt query` | ✅ battle-tested |
-| Prove Ethereum chain facts (wallet activity, tx existence, block finality) | `sxt chain-plan` → render → deploy → query | ✅ on `ETHEREUM.BLOCKS` / `TRANSACTIONS` (on-chain parameterized callback pending first run) |
-| Register any EVM contract so SXT indexes its events into tables | `sxt index` | ✅ registration live; proofs against SCI tables pending SXT |
+Smart contracts can't read databases, and oracles ask you to trust an operator. Proof of SQL removes the trust: every query result carries a ZK proof that **the data was never tampered with and the SQL executed correctly** — checkable by anyone in milliseconds, or by a contract on Base in ~150K gas. Not even the database operator can forge an answer. This CLI is the working pipeline from raw data to that proof.
+
+## What you can build
+
+| Use case | The unlock | How | Status |
+|---|---|---|---|
+| **Trustless token gates & airdrops** — a contract grants mints/access/claims from an off-chain allowlist | No merkle snapshots, no signer backend, list stays updatable off-chain | `sxt publish` your list → contract proves membership via `sxt query` | ✅ battle-tested on mainnet |
+| **Compliance with cryptographic receipts** — prove an address is **NOT** on a sanctions/drainer list | Negative proofs are first-class: "absence of a row" is as provable as presence | `sxt publish` → negative lookup via `sxt verify` / `sxt query` | ✅ negative proofs verified |
+| **Wallet reputation from L1 history** — a Base contract reacts to proven Ethereum facts ("has this wallet ever used protocol X?") | One deployed contract answers for *any* wallet × *any* target — parameters bound at call time, no per-project deploys | `sxt chain-plan` on `ETHEREUM.TRANSACTIONS` → `sxt query` | ✅ proofs + contract verified (on-chain parameterized callback pending first run) |
+| **Verifiable data feeds** — any tabular dataset becomes an oracle whose answers carry math, not reputation | Prices, scores, attestations, game state — consumers verify, never trust | `sxt publish` → consumers run `sxt verify` or on-chain `query()` | ✅ |
+| **AI agents that can't lie about data** — agent answers arrive with proofs attached | The MCP server returns proof-backed query results to any MCP client | `sxt parity` proves the wrapping; see [AI-native interfaces](#ai-native-interfaces) | ✅ |
+| **Your contract's events as queryable tables** | Any EVM contract's history becomes SQL without building an indexer | `sxt index` | ✅ registration live; proofs pending SXT's SCI promotion |
 
 ---
 
