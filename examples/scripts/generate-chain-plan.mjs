@@ -244,17 +244,28 @@ async function main() {
   console.log(`  Full SQL:     ${sql}`);
   console.log('');
 
-  // Call the SXT chain RPC.
-  const rpcRes = await fetch(RPC, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: name,
-      method: 'commitments_v1_evmProofPlan',
-      params: { query: sql },
-    }),
-  });
+  // Call the SXT chain RPC. Cold first connections can time out and then
+  // succeed (slow resolver / IPv6-broken routes) — retry once before failing.
+  let rpcRes;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      rpcRes = await fetch(RPC, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: name,
+          method: 'commitments_v1_evmProofPlan',
+          params: { query: sql },
+        }),
+        signal: AbortSignal.timeout(30000),
+      });
+      break;
+    } catch (err) {
+      if (attempt >= 2) throw err;
+      console.log('  · transient network error — retrying once…');
+    }
+  }
   const rpcJson = await rpcRes.json();
 
   if (rpcJson.error) {
@@ -316,8 +327,9 @@ async function main() {
   console.log('  • Off-chain pre-flight (free, ~1s):');
   console.log(`      SXT_PLAN=${outPath} node verify-table.mjs --params "<arg1>[,<arg2>...]"`);
   console.log('');
-  console.log('  • Render Solidity contract (once render-onchain-query.mjs --params support lands):');
+  console.log('  • Render the parameterized Solidity consumer (verified working):');
   console.log(`      node render-onchain-query.mjs --plan ${outPath} --name <ContractName> --params`);
+  console.log('    → query(<type> param1, …) bound at call time — one deployed contract, any inputs.');
 }
 
 main().catch((err) => {

@@ -1,6 +1,6 @@
 {
   "name": "dreamspace-contracts",
-  "version": "0.1.0",
+  "version": "0.2.0-beta.1",
   "description": "Smart contract workflows for the Space and Time stack — deploy contracts via foundry, pre-deployment audits combining static analysis with onchain due diligence, and Proof of SQL onchain consumption.",
   "author": {
     "name": "SXT Tools"

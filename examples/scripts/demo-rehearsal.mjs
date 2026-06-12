@@ -78,7 +78,12 @@ step("Off-chain Proof of SQL query (live STAKERS table)", 8000, async () => {
     apiKey,
   );
 
-  const sql = `SELECT COUNT(*) AS ROWS_PUBLISHED FROM ${STAKERS_TABLE}`;
+  // Point lookup, not COUNT(*): as of June 2026 the prover returns null
+  // AttestedCommitments for aggregate queries ("failed to deserialize prover
+  // response json") while point lookups / scans prove end-to-end. This is the
+  // same membership-proof shape the on-chain StakersQuery contract uses.
+  const sampleStaker = process.env.SAMPLE_STAKER ?? "0x45c56e138881fd3ff46359ba1826d5fc6fccaedc";
+  const sql = `SELECT STAKER FROM ${STAKERS_TABLE} WHERE STAKER = '${sampleStaker}'`;
   const result = await client.queryAndVerify(sql);
 
   return {
@@ -208,7 +213,20 @@ for (let i = 0; i < STEPS.length; i++) {
   process.stdout.write(`  ${dim(stepNum)} ${s.name}…\n`);
   const start = Date.now();
   try {
-    const info = await s.fn();
+    let info;
+    try {
+      info = await s.fn();
+    } catch (firstErr) {
+      // Cold first connections (slow resolver / IPv6-broken routes) fail with
+      // a ~10s connect timeout and then succeed immediately — retry once
+      // before declaring the step failed.
+      if (/fetch failed|TIMEOUT|ECONN|ETIMEDOUT/i.test(String(firstErr?.message ?? firstErr))) {
+        console.log(`        ${dim("· transient network error — retrying once…")}`);
+        info = await s.fn();
+      } else {
+        throw firstErr;
+      }
+    }
     const elapsed = Date.now() - start;
     const inBudget = elapsed <= s.budgetMs;
     const tag = inBudget ? green("✓") : yellow("⚠");

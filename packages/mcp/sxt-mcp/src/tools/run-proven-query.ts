@@ -1,4 +1,4 @@
-**
+/**
  * sxt.run_proven_query — off-chain Proof of SQL via /v1/zkquery.
  *
  * Mirrors examples/scripts/verify-table.mjs line-for-line. Uses the

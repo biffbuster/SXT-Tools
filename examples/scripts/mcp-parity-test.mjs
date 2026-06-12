@@ -30,7 +30,11 @@ const MCP_INDEX = resolve(REPO_ROOT, "packages", "mcp", "sxt-mcp", "dist", "inde
 
 const STAKERS_TABLE =
   process.env.SXT_TABLE ?? "MY_AUDIT_V2_5731EC0BBEB5F7BCAA2E4BAF3179A7A4C59C2552.STAKERS";
-const SQL = `SELECT COUNT(*) AS ROW_COUNT FROM ${STAKERS_TABLE}`;
+// Point lookup, not COUNT(*): aggregates currently fail at the prover
+// (null AttestedCommitments — see README "Prover status"). Same shape as
+// the demo + on-chain membership proof.
+const SAMPLE_STAKER = process.env.SAMPLE_STAKER ?? "0x45c56e138881fd3ff46359ba1826d5fc6fccaedc";
+const SQL = `SELECT STAKER FROM ${STAKERS_TABLE} WHERE STAKER = '${SAMPLE_STAKER}'`;
 
 const args = process.argv.slice(2);
 const JSON_OUT = args.includes("--json");
@@ -153,9 +157,23 @@ log("");
 
 let mcpResult, sdkResult, mcpError, sdkError;
 
+// Cold first connections (slow resolver / IPv6-broken routes) fail with a
+// ~10s connect timeout and then succeed — retry each path once on the
+// transient-network signature before declaring it failed.
+const isTransient = (e) => /fetch failed|TIMEOUT|ECONN|ETIMEDOUT/i.test(String(e?.message ?? e));
+async function withRetry(fn) {
+  try {
+    return await fn();
+  } catch (e) {
+    if (!isTransient(e)) throw e;
+    log("    · transient network error — retrying once…");
+    return fn();
+  }
+}
+
 log("  Path A: via MCP server (sxt.run_proven_query tool)…");
 try {
-  mcpResult = await runViaMcp();
+  mcpResult = await withRetry(runViaMcp);
   log(`    ✓ ${mcpResult.elapsedMs}ms  verified=${mcpResult.verified}  tableRef=${mcpResult.tableRef}`);
 } catch (e) {
   mcpError = e;
@@ -165,7 +183,7 @@ log("");
 
 log("  Path B: direct SDK call (verify-table.mjs equivalent)…");
 try {
-  sdkResult = await runViaSdk();
+  sdkResult = await withRetry(runViaSdk);
   log(`    ✓ ${sdkResult.elapsedMs}ms`);
 } catch (e) {
   sdkError = e;

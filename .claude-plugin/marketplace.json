@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "AI skills catalog for the Space and Time stack. Publish chain-secured datasets, deploy contracts, and run Proof of SQL queries that any smart contract on Base or Ethereum can verify onchain.",
-    "version": "0.1.0"
+    "version": "0.2.0-beta.1"
   },
   "plugins": [
     {
       "name": "dreamspace-query",
       "source": "./packages/plugins/dreamspace-query",
       "description": "Verifiable SQL on Space and Time. Keeps agents inside the Proof of SQL surface.",
-      "version": "0.1.0",
+      "version": "0.2.0-beta.1",
       "author": {
         "name": "SXT Tools"
       },
@@ -25,7 +25,7 @@
       "name": "dreamspace-contracts",
       "source": "./packages/plugins/dreamspace-contracts",
       "description": "Deploy contracts via foundry and run pre-deploy audits combining slither with SXT-indexed onchain due diligence.",
-      "version": "0.1.0",
+      "version": "0.2.0-beta.1",
       "author": {
         "name": "SXT Tools"
       },
@@ -38,7 +38,7 @@
       "name": "dreamspace-data",
       "source": "./packages/plugins/dreamspace-data",
       "description": "Publish chain-secured CSV datasets to Space and Time for downstream skills to query with Proof of SQL.",
-      "version": "0.1.0",
+      "version": "0.2.0-beta.1",
       "author": {
         "name": "SXT Tools"
       },

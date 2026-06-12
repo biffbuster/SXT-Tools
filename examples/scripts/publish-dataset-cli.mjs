@@ -24,7 +24,9 @@
  *
  * Optional env vars:
  *   SXT_RPC        WebSocket endpoint. Default: wss://rpc.mainnet.sxt.network
- *                  (matches the canonical spaceandtimefdn/sxt-chain-examples tutorial).
+ *                  (the publish FLOW matches the canonical sxt-chain-examples
+ *                  tutorial; the tutorial itself targets testnet — mainnet
+ *                  default is this repo's deliberate choice).
  *                  Override to wss://rpc.testnet.sxt.network for testnet.
  *                  Note: testnet and mainnet have separate credit balances.
  *   SXT_TABLE_TYPE "Community" | "OwnerPermissioned" | "UserVerified". Default: Community
@@ -307,6 +309,34 @@ async function main() {
   console.log('');
   console.log('▶ CREATE TABLE statement:');
   console.log(createStatement.split('\n').map((l) => `    ${l}`).join('\n'));
+
+  // ─── Creation-burn pre-check ──────────────────────────────────────────
+  // The sxt-node tables pallet burns CREATE_COST = 20 SXT per created object
+  // for non-privileged accounts — createNamespace AND each table in
+  // createTables (verified against pallet source + live FundsUnavailable,
+  // June 2026). Fail fast with a clear message instead of letting the batch
+  // die with a cryptic dispatch error.
+  {
+    const CREATE_BURN = 20n * 10n ** 18n;
+    const nsExists = (await api.query.tables.namespaceVersions.entries())
+      .some(([key]) => key.args[0]?.toHuman?.() === namespace);
+    const burnNeeded = nsExists ? CREATE_BURN : CREATE_BURN * 2n;
+    const acct = await api.query.system.account(signer.address);
+    const free = acct.data.free.toBigInt();
+    console.log('');
+    console.log(`▶ Creation burn check: ${nsExists ? 'namespace exists — 20 SXT (table only)' : 'new namespace — 40 SXT (namespace + table)'}`);
+    console.log(`  Wallet free balance: ${Number(free / 10n ** 12n) / 1e6} SXT`);
+    if (free < burnNeeded) {
+      console.error('');
+      console.error(`✗ Insufficient SXT chain balance for the creation burn.`);
+      console.error(`  Need ≥ ${burnNeeded / 10n ** 18n} SXT native on SXT chain; have ${Number(free / 10n ** 12n) / 1e6}.`);
+      console.error('  Table creation burns 20 SXT per object (namespace + each table) for');
+      console.error('  non-privileged accounts. Fund the wallet at https://chain.spaceandtime.io');
+      console.error('  and re-run. (Inserting into an EXISTING table does not burn.)');
+      await api.disconnect();
+      process.exit(1);
+    }
+  }
 
   // ─── Build createNamespace + createTables (batched) ───────────────────
   if (!api.tx.tables?.createNamespace || !api.tx.tables?.createTables) {

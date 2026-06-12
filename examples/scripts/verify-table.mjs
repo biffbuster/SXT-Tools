@@ -35,7 +35,11 @@ const AUTH   = process.env.SXT_AUTH   ?? 'https://proxy.api.makeinfinite.dev/aut
 const RPC    = process.env.SXT_RPC_HTTP ?? 'https://rpc.mainnet.sxt.network/';
 
 // Resolution order: env > .last-publish.json handoff > canonical demo.
-const handoff = readLastPublish();
+let handoff = readLastPublish();
+// An indexed-sci handoff (written by index-contract.mjs) is not consumable by
+// the CSV proof pipeline — SCI tables aren't zk-provable yet. Ignore it so
+// env vars / legacy defaults win instead of resolving to an unprovable table.
+if (handoff?.kind === 'indexed-sci') handoff = null;
 const BASE_PLAN_DIR = join(HERE, '..', 'data', 'proof-plans');
 const HANDOFF_TABLE = handoff?.tableRef;
 const PLAN_DIR = process.env.SXT_PLAN_DIR
@@ -74,14 +78,24 @@ const client = new SxTClient(PROVER, AUTH, RPC, apiKey);
 async function provenQuery(label, sql) {
   console.log(`\n▶ ${label}`);
   console.log(`  SQL: ${sql}`);
-  try {
-    const result = await client.queryAndVerify(sql);
-    console.log(`  ✓ Proof verified locally.`);
-    console.log(`  Result: ${JSON.stringify(result, null, 2).split('\n').slice(0, 20).join('\n  ')}`);
-    return result;
-  } catch (err) {
-    console.error(`  ✗ ${err?.message ?? err}`);
-    return null;
+  // Cold first connections (slow resolver / IPv6-broken routes) fail with a
+  // ~10s connect timeout then succeed — retry once so this zero-cost gate
+  // doesn't spuriously scare users off a healthy table before a 100 SXT spend.
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const result = await client.queryAndVerify(sql);
+      console.log(`  ✓ Proof verified locally.`);
+      console.log(`  Result: ${JSON.stringify(result, null, 2).split('\n').slice(0, 20).join('\n  ')}`);
+      return result;
+    } catch (err) {
+      const msg = String(err?.message ?? err);
+      if (attempt === 1 && /fetch failed|TIMEOUT|ECONN|ETIMEDOUT/i.test(msg)) {
+        console.log('  · transient network error — retrying once…');
+        continue;
+      }
+      console.error(`  ✗ ${msg}`);
+      return null;
+    }
   }
 }
 

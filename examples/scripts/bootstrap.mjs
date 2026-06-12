@@ -26,7 +26,13 @@ const CONTRACTS_DIR = ROOT + '../contracts/sxt-onchain-query';
 const SXT_TOKEN = '0xA2c22252cDc8b7cDdEe1B0b2E242818509fCf7b8'; // SXT ERC-20 on Base
 const QUERY_ROUTER = '0x220a7036a815a1Bd4A7998fb2BCE608581fA2DbB';
 const REQUIRED_NODE_MAJOR = 18;
-const PUBLISH_FEE_FLOOR = 10n ** 15n; // 0.001 SxT chain native
+// Creating a namespace or table burns CREATE_COST = 20 SXT per object for
+// non-privileged accounts (sxt-node tables pallet; verified live June 2026).
+// First publish = namespace + table = 40 SXT. Inserts into existing tables
+// only pay tx fees (~0.001 SXT).
+const CREATE_BURN = 20n * 10n ** 18n;
+const FIRST_PUBLISH_FLOOR = 2n * CREATE_BURN; // namespace + first table
+const INSERT_FEE_FLOOR = 10n ** 15n; // 0.001 SxT for inserts into existing tables
 const ETH_FLOOR = 3n * 10n ** 15n;    // 0.003 ETH on Base for deploy + approve + query (real cost ~0.001 ETH; ~3× headroom)
 const SXT_FLOOR = 100n * 10n ** 18n;  // 100 SXT per query() call
 
@@ -122,11 +128,18 @@ try {
   const acct = await api.query.system.account(signer.address);
   const free = BigInt((acct.data ?? acct).free.toString());
   ok(`connected to ${(await api.rpc.system.chain()).toString()} via ${SXT_RPC}`);
-  if (free >= PUBLISH_FEE_FLOOR) {
-    ok(`native balance ${formatUnits(free, 18)} SxT — sufficient for publish (~0.001 SxT per run)`);
+  if (free >= FIRST_PUBLISH_FLOOR) {
+    ok(`native balance ${formatUnits(free, 18)} SxT — covers a first publish (40 SXT creation burn: namespace + table)`);
     canPublish = true;
+  } else if (free >= CREATE_BURN) {
+    ok(`native balance ${formatUnits(free, 18)} SxT — covers a new table in an EXISTING namespace (20 SXT burn); a brand-new namespace needs 40`);
+    canPublish = true;
+  } else if (free >= INSERT_FEE_FLOOR) {
+    bad(`native balance ${formatUnits(free, 18)} SxT — enough for inserts into existing tables, but CREATING a table burns 20 SXT each (40 for namespace + first table)`);
+    info('Fund via SXTChainFunding mainnet contract: 0xb1bc1d7eb1e6c65d0de909d8b4f27561ef568199');
+    info('  → approve + fundAddress against the SXT token on Ethereum mainnet (0xE6Bf...B195) to credit your SxT chain account');
   } else {
-    bad(`native balance ${formatUnits(free, 18)} SxT — need ≥ 0.001 SxT for publish fees`);
+    bad(`native balance ${formatUnits(free, 18)} SxT — need ≥ 0.001 SxT for inserts and 20–40 SXT to create tables`);
     info('Fund via SXTChainFunding mainnet contract: 0xb1bc1d7eb1e6c65d0de909d8b4f27561ef568199');
     info('  → approve + fundAddress against the SXT token on Ethereum mainnet (0xE6Bf...B195) to credit your SxT chain account');
   }

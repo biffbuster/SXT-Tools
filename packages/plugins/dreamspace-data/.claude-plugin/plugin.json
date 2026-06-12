@@ -1,6 +1,6 @@
 {
   "name": "dreamspace-data",
-  "version": "0.1.0",
+  "version": "0.2.0-beta.1",
   "description": "Publish CSV datasets to chain-secured Space and Time tables (Substrate extrinsics, Apache Arrow IPC, EthEcdsa-signed) so downstream skills can query them with Proof of SQL.",
   "author": {
     "name": "SXT Tools"

@@ -1,0 +1,31 @@
+# Enforce LF in the repo so checkouts work identically on macOS, Linux, and
+# Windows regardless of each contributor's core.autocrlf setting.
+#
+# CRITICAL: examples/scripts/sxt.mjs is an npm bin entry — if its
+# `#!/usr/bin/env node` shebang line ever lands with a CRLF ending, the global
+# `sxt` command breaks on macOS/Linux with "env: node\r: No such file or
+# directory". eol=lf on *.mjs makes that impossible.
+
+* text=auto
+
+*.mjs text eol=lf
+*.js text eol=lf
+*.cjs text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.sol text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.sh text eol=lf
+.env.example text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary

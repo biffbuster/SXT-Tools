@@ -1,6 +1,6 @@
 ---
 name: index-contract
-description: Register any verified EVM smart contract for Space and Time to index its events into queryable SXT chain tables under your namespace. **Status (June 2026):** SCI tables are not yet on the zk-proven surface — SXT's own docs list them as "coming soon." Data ingestion works (via chain.spaceandtime.io's "Get data from chain" UI) but the on-chain Proof-of-SQL pipeline does NOT. For NFT/token activity proofs that work TODAY, route the user to the `chain-data-query` skill against the pre-indexed `ETHEREUM.ERC721_TRANSFERS` / `ERC20_TRANSFERS` / `ERC1155_TRANSFERS` tables instead.
+description: Register any EVM smart contract for Space and Time to index its events into queryable SXT chain tables under your namespace — via the CLI (`examples/scripts/index-contract.mjs`, submits `tables.createTableWithSciMetadata`) or the chain.spaceandtime.io Studio UI. **Status (June 2026):** SCI tables are not yet on the zk-proven surface — SXT's own docs list them as "coming soon." Data ingestion works but the on-chain Proof-of-SQL pipeline does NOT. For NFT/token activity proofs that work TODAY, route the user to the `chain-data-query` skill against the pre-indexed `ETHEREUM.ERC721_TRANSFERS` / `ERC20_TRANSFERS` / `ERC1155_TRANSFERS` tables instead.
 ---
 
 # Index Contract — Smart Contract Indexing (SCI)
@@ -16,19 +16,19 @@ What that means concretely:
 
 **Today's recommended path for "prove a wallet interacted with contract X":** use the pre-indexed surface (`ETHEREUM.ERC721_TRANSFERS`, `ETHEREUM.ERC20_TRANSFERS`, etc.) via the `chain-data-query` skill. That surface IS zk-proven today. The canonical worked example for the NFT-ownership story now lives there (Pudgy Penguins via `ERC721_TRANSFERS`).
 
-🚧 **CLI implementation also in progress.** Even for plain data ingestion the CLI script (`index-contract.mjs`) isn't built yet — today's path is the Studio UI. This SKILL.md documents the intended CLI shape so forked users can preview the design.
+✅ **CLI registration is implemented:** `examples/scripts/index-contract.mjs` submits the same `tables.createTableWithSciMetadata` extrinsic the Studio UI uses (verified by reading live `api.query.tables.tableMetadata` entries on SXT mainnet, June 2026). Registration + ingestion work today; the zk-proof pipeline against the resulting tables does not (see Status above).
 
-## What this skill will eventually do
+## What this skill does
 
-Once SXT ships SCI zk-commitment AND we build the CLI, this skill will register an EVM smart contract for SXT's indexer service. Per the SXT SCI docs verbatim:
+Registers an EVM smart contract's events for SXT's indexer service. Per the SXT SCI docs verbatim:
 
 > "We pull the ABI, we automatically generate a table for each smart contract event, and we begin populating them for you automatically."
 
-The per-event tables will live under your namespace and become Proof-of-SQL queryable, with the trust model upgrade vs `dataset-publish`:
+The per-event tables live under your namespace, with the trust model upgrade vs `dataset-publish`:
 - **CSV publish:** "trust the publisher that the rows are accurate"
 - **Contract indexing:** "trust only Ethereum" — events come from the chain itself, SXT just transcribes them into queryable form
 
-For now the second model only works against the 23 pre-indexed core tables, not against arbitrary user-registered contracts.
+Until SXT promotes SCI tables to the zk-committed catalog, the second model is only *provable* against the pre-indexed core tables, not against arbitrary user-registered contracts.
 
 ## Indexing window — live mode today, historical mode coming soon
 
@@ -60,53 +60,57 @@ After registering and funding a table:
 2. Run an off-chain `/v1/zkquery` against the table even with `COUNT(*) = 0` — a successful HyperKZG proof of an empty result confirms the SCI table is on the zk-committed proven surface (separate question from "do rows exist yet"). A 422 from the prover means SCI tables aren't proven yet and onchain `query()` won't work.
 3. Only after the gate test passes is it safe to spend 100 SXT on an onchain `query()`.
 
-## When to invoke (once shipped)
+## When to invoke
 
-- The user wants to query a smart contract's event history with Proof of SQL — any EVM event: NFT trades, DEX swaps, lending protocol borrows, governance votes, ENS registrations, anything indexable.
-- The user wants trustless onchain data verification but the relevant SXT-indexed catalog table isn't zk-committed yet.
-- The user is shipping a product that needs cryptographic guarantees about contract activity (e.g., "verify this wallet has interacted with this contract" → reusable Solidity callback).
+- The user wants a smart contract's events indexed into SXT chain tables going forward — any EVM event: NFT trades, DEX swaps, lending protocol borrows, governance votes, ENS registrations, anything indexable.
+- The user is preparing for the day SCI joins the zk-proven surface and wants ingestion running now.
+- The user needs Proof-of-SQL guarantees TODAY → route to `chain-data-query` instead (see Status).
 
-## CLI shape (planned)
-
-The CLI accepts any verified contract. Pass the address, chain, and the events you want indexed:
+## CLI usage
 
 ```bash
-# Generic shape — substitute your own contract
-node index-contract.mjs \
-  --address <0x…> \
-  --chain <ethereum|base> \
-  --events <Event1,Event2,…> \
-  [--namespace <MY_PROJECT>]
-
-# Example — Pudgy Penguins Transfer event (any standard ERC-721 works the same way)
+# Keyless mode (recommended) — the event declaration you type is stored
+# verbatim on chain; no explorer API key, works even for unverified contracts.
 node index-contract.mjs \
   --address 0xBd3531dA5CF5857e7CfAA92426877b022e612cf8 \
   --chain ethereum \
-  --events Transfer
+  --event-signature "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)" \
+  [--namespace MY_PROJECT]
+
+# ABI-fetch mode — needs ETHERSCAN_API_KEY (one v2 key covers all chains);
+# the contract must be source-verified on the explorer.
+node index-contract.mjs --address 0x… --chain ethereum --events Transfer,Approval
+
+# Always rehearse first: --dry-run prints DDL + metadata + encoded extrinsics
+# without signing anything; testnet is a separate credit balance.
+SXT_RPC=wss://rpc.testnet.sxt.network node index-contract.mjs \
+  --address 0x… --chain sepolia --event-signature "event …" --dry-run
 ```
 
-**Reminder:** even when this CLI ships, the resulting tables won't be Proof-of-SQL queryable until SXT promotes SCI to the zk-proven surface. Today the empirically end-to-end-working zk-proven Ethereum surface is just `ETHEREUM.BLOCKS` and `ETHEREUM.TRANSACTIONS` (mirrors SXT's own canonical SDK example). When SXT activates more tables (the docs list ERC-20 / ERC-721 / ERC-1155 transfers as "ZK-proven" but only the core two execute end-to-end through the prover today), this section will widen accordingly.
+**Supported chains: `ethereum`, `sepolia`, `polygon`, `zksync`** — these are the SXT chain's `Source` enum variants (verified against live chain metadata, June 2026). **There is no Base variant on-chain today**; `--chain base` is rejected with an explanatory error. (Bitcoin is in the enum but has no EVM events.)
 
-The script will:
-1. Fetch the verified ABI from Etherscan/BaseScan (requires `ETHERSCAN_API_KEY` / `BASESCAN_API_KEY` in env)
-2. Extract the chosen events from the ABI and propose SXT SQL table schemas (event params → typed columns + standard metadata: `BLOCK_NUMBER`, `TRANSACTION_HASH`, `LOG_INDEX`)
-3. Confirm with the user: namespace, table names, cost estimate
-4. Submit `tables.createNamespace + tables.createTables` with `tableType: SCI` (vs `Community` for CSV publishes)
-5. Compute the deterministic per-table funding account, transfer ≥100 SXT to each (this is what starts the indexer)
-6. Poll for first indexed row to confirm the indexer is live
-7. Write to `.last-publish.json` handoff with `kind: "indexed-sci"` so downstream skills (`chain-data-query`, `render-onchain-query`) auto-pick up the new tables
+What the script does:
+1. Resolves event declarations (typed `--event-signature`, or verified ABI via Etherscan v2 with `--events`)
+2. Maps event params → SXT columns (`uint*`/`int*` → `DECIMAL(75,0)`, `address` → `BINARY` — both verified against live Studio-registered tables; SQL reserved words auto-renamed, e.g. `from`/`to` → `FROM_ADDRESS`/`TO_ADDRESS` matching SXT's pre-indexed naming; arrays/tuples/indexed-dynamic-types/anonymous events refused)
+3. Builds DDL with `NOT NULL` on every column + implicit `BLOCK_NUMBER BIGINT` / `TIME_STAMP TIMESTAMP` — never a `PRIMARY KEY`
+4. Prints the full plan and requires confirmation (typing `mainnet` on mainnet; `--yes` for scripted use)
+5. Submits `utility.batchAll([tables.createNamespace, tables.createTableWithSciMetadata × events])` with the same AlreadyExists fallback as `publish-dataset-cli.mjs` — idempotent re-runs
+6. Writes `.last-publish.json` handoff with `kind: "indexed-sci"` so downstream skills auto-pick up the new tables
+7. Prints funding instructions — each table starts indexing only once its funding account holds ≥100 SXT. The funding-account derivation is not exposed on-chain; get the address from chain.spaceandtime.io
 
-## Today's workaround — chain.spaceandtime.io UI
+**Reminder:** the resulting tables won't be Proof-of-SQL queryable until SXT promotes SCI to the zk-proven surface. Today the empirically end-to-end-working zk-proven Ethereum surface is just `ETHEREUM.BLOCKS` and `ETHEREUM.TRANSACTIONS` (mirrors SXT's own canonical SDK example). When SXT activates more tables, this section will widen accordingly.
 
-Until the CLI ships, use the UI flow at https://chain.spaceandtime.io → **Index a Contract**:
+## Alternative — chain.spaceandtime.io Studio UI
+
+The UI flow at https://chain.spaceandtime.io → **Index a Contract** does the same registration with extras the CLI can't do (custom column renames beyond reserved words, the per-table funding address displayed inline):
 
 1. Connect your SXT-funded wallet
-2. Paste the contract address + select chain (Ethereum or Base)
+2. Paste the contract address + select chain
 3. The UI fetches the ABI and lists indexable events — select the ones you want indexed
 4. Review the generated table schema; rename columns if needed
 5. Sign the namespace + table creation transactions (a few cents in SXT chain credits)
 6. **Fund each derived table account with ≥100 SXT** (the UI displays the per-table funding address)
-7. The indexer creates the schema, back-populates from the contract's event history, and tails new blocks live (turnaround typically minutes to hours depending on contract volume; not yet documented by SXT — verify empirically for your case)
+7. The indexer creates the schema and tails new blocks live (turnaround typically minutes to hours depending on contract volume; not yet documented by SXT — verify empirically for your case)
 8. Note the resulting namespace + table references — paste them into the rest of the pipeline
 
 Once the tables have a few rows, point `chain-data-query` at them by adding the table refs to `ZK_COMMITTED_TABLES` in `generate-chain-plan.mjs` (or wait for the next CLI release where this happens automatically via the handoff).
@@ -130,9 +134,9 @@ User goal: "verify wallet has held a token from collection `<contract>`."
 
 - **SCI tables are not on the zk-proven surface today** — see Status section above. This is the blocker for the full pipeline.
 - **Backfill turnaround is not documented** — even for plain data ingestion, "a few minutes to a few hours" per SXT docs depending on contract size. Large contracts (CryptoPunks, Seaport) can take hours. No "backfill complete" webhook; poll `MAX(BLOCK_NUMBER)`.
-- **Verified ABI required** — the contract must be source-verified on the explorer. Unverified contracts can't be auto-indexed because the event ABI is unknown.
-- **Cost** — chain credits for namespace + table creation (cents), plus ≥100 SXT per indexed event-table to fund the indexer account.
-- **Supported chains today** — Ethereum mainnet + Base mainnet per SXT's SCI docs. Other EVM chains may follow.
+- **Verified ABI required only for `--events` mode** — `--event-signature` works for any contract, verified or not, because you supply the event declaration yourself.
+- **Cost** — creating an SCI table **burns 20 SXT per table** for non-privileged accounts (`CREATE_COST` in the sxt-node tables pallet; verified June 2026 — a `FundsUnavailable` dispatch error means your SXT chain balance is below the burn). On top of that, ≥100 SXT per event-table funds the indexer account to start ingestion. Plus negligible chain credits for the namespace.
+- **Supported chains today** — `ethereum`, `sepolia`, `polygon`, `zksync` (the SXT chain `Source` enum, verified June 2026). **Not Base** — despite SXT marketing mentioning Base indexing, the chain's Source enum has no Base variant; the Studio UI's Base support presumably routes differently. Re-probe the enum before assuming this changed.
 
 ## Pairs with
 

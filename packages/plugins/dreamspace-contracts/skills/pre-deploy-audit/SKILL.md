@@ -1,4 +1,4 @@
---
+---
 name: pre-deploy-audit
 description: Pre-deployment and post-deployment Solidity contract audit. Combines slither static analysis with Space and Time onchain due diligence — cross-referencing the contract against user-published reference datasets (known exploit signatures, drainer wallets, trusted deployer allowlists) and indexed contract event history. Produces a structured audit report. Use when the user is about to deploy a Solidity contract, asks to audit a source file or deployed address, asks "is this contract safe", or mentions cross-referencing against reference data. Refuses to certify any contract as "safe" — only produces evidence the user reviews before deciding.
 ---

@@ -18,14 +18,14 @@ This skill keeps you inside the surface that can actually carry a proof. Anythin
 
 ## The proven SQL surface (allowed)
 
-When the user wants a verifiable result, every clause and operator must come from this list. Verified against the [Proof of SQL syntax spec](https://github.com/spaceandtimelabs/sxt-proof-of-sql/blob/main/docs/SQLSyntaxSpecification.md).
+When the user wants a verifiable result, every clause and operator must come from this list. Verified against the [Proof of SQL syntax spec](https://github.com/spaceandtimefdn/sxt-proof-of-sql/blob/main/docs/SQLSyntaxSpecification.md) (re-checked 2026-06-10 — this list matches the spec exactly).
 
 - **Statements**: `SELECT … WHERE`, `GROUP BY`, `LIMIT`, `OFFSET`, `UNION ALL`
 - **JOIN**: only **inner joins on a single column**. No other join types or multi-column joins.
 - **Comparison**: `=`, `!=`, `>=`, `<=`, `>`, `<` (decimal inequality only up to 38 digits)
 - **Logical**: `AND`, `OR`, `NOT`
 - **Arithmetic**: `+`, `-`, `*`
-- **Aggregates**: `SUM`, `COUNT`
+- **Aggregates**: `SUM`, `COUNT` — ⚠ empirically failing at the prover as of 2026-06-10 (`failed to deserialize prover response json: … expected struct AttestedCommitments` via `/v1/zkquery`, all working SDK versions). They are *in* the documented surface but don't execute today; prefer point lookups/scans and re-test with `node verify-table.mjs` before promising aggregates.
 - **Column types**: `Boolean`, `Uint8`, `TinyInt`, `SmallInt`, `Int`, `BigInt`, `Int128`, `Decimal75`, `Varchar`, `Varbinary`, `Timestamp`
 
 The identifier `count` is reserved and cannot be used as a column alias.
@@ -68,7 +68,7 @@ Space and Time exposes two kinds of tables to the agent:
 
 Use UPPERCASE schema notation when writing queries: `<SCHEMA>.<TABLE>`.
 
-Do **not** assume pre-built core-chain tables (e.g., a global `ETHEREUM.TRANSACTIONS` table) are available. If the user wants to query chain data, they first need to register the relevant contract for indexing or publish their own dataset. Confirm with the user which tables they have access to before generating SQL.
+Pre-built core-chain tables DO exist on the zk-proven surface — but the empirically validated set is narrow: `ETHEREUM.BLOCKS` and `ETHEREUM.TRANSACTIONS` round-trip the prover end-to-end today (others in the catalog fail with `254018 incomplete commitment coverage`). Route chain-data questions to the `chain-data-query` skill, which owns that validated list. For anything else, the user registers a contract for indexing (`index-contract`) or publishes their own dataset (`dataset-publish`).
 
 Hit the SXT Discovery API to enumerate what's queryable for the user's account before writing any query you're not certain about.
 

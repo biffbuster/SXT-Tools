@@ -1,4 +1,4 @@
---
+---
 name: dataset-publish
 description: Publish a dataset to Space and Time as a chain-secured table that supports Proof of SQL queries. Use when the user wants to upload a CSV / Parquet / JSON file to SXT, create a custom queryable table, share reference data (e.g., known-exploit signatures, allowlists, off-chain metadata) with downstream skills, or stand up data that the pre-deploy-audit skill can cross-reference against. Walks the user through both the no-code chain.spaceandtime.io flow and the programmatic Substrate RPC flow with Apache Arrow IPC encoding.
 ---

@@ -1,4 +1,4 @@
---
+---
 name: run-proven-query
 description: >-
   Translate a user's natural-language question about a published Space and Time

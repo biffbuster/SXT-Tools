@@ -40,10 +40,10 @@ const SKILL_SPECS: SkillSpec[] = [
     stage: 1,
     languages: ["TypeScript", "Solidity"],
     cardDescription:
-      "Register any verified EVM contract for SXT to index its events into queryable tables under your namespace. Data ingestion via the chain.spaceandtime.io UI ships today; SXT's docs list SCI zk-commitment itself as 'coming soon' so the on-chain proof pipeline against SCI tables isn't end-to-end yet. CLI implementation also in progress.",
+      "Register any EVM contract for SXT to index its events into queryable tables under your namespace. CLI registration ships now (index-contract.mjs via the createTableWithSciMetadata extrinsic — the same one the Studio UI submits). SXT's docs still list SCI zk-commitment itself as 'coming soon', so the on-chain proof pipeline against SCI tables isn't end-to-end yet.",
     highlights: [
-      "ABI auto-fetch from Etherscan / BaseScan + event → SXT schema generation",
-      "tableType: SCI extrinsic + per-table indexer funding (~100 SXT/event)",
+      "Keyless --event-signature mode, or verified-ABI fetch via Etherscan v2",
+      "createTableWithSciMetadata extrinsic + per-table indexer funding (~100 SXT/event)",
       "Trustless onchain data: events from the chain itself, not curated CSVs",
     ],
     status: "coming-soon",
@@ -351,17 +351,21 @@ export default function DocsPage() {
           <div className="skills-plugin-card">
             <div className="skills-plugin-card-name">dreamspace-data</div>
             <div className="skills-plugin-card-desc">
-              Publish CSV / Parquet / JSON to SXT chain as Proof-of-SQL-queryable tables.
+              Publish CSVs to SXT chain as Proof-of-SQL-queryable tables, or register EVM
+              contracts for event indexing.
             </div>
-            <div className="skills-plugin-card-skills">1 skill · dataset-publish</div>
+            <div className="skills-plugin-card-skills">
+              2 skills · dataset-publish, index-contract
+            </div>
           </div>
           <div className="skills-plugin-card">
             <div className="skills-plugin-card-name">dreamspace-query</div>
             <div className="skills-plugin-card-desc">
-              Verifiable SQL against published tables. Foundations + REST execution with proof receipts.
+              Verifiable SQL against published tables and SXT&apos;s pre-indexed Ethereum core.
+              Foundations + REST execution with proof receipts.
             </div>
             <div className="skills-plugin-card-skills">
-              2 skills · proof-of-sql-foundations, run-proven-query
+              3 skills · proof-of-sql-foundations, run-proven-query, chain-data-query
             </div>
           </div>
           <div className="skills-plugin-card">

@@ -104,14 +104,14 @@ Each `SKILL.md` is loaded by the agent when its trigger phrases match the user's
 **What Claude does after activating this skill:**
 
 1. Asks for the contract address + chain + which events to index (or infers from your prompt — e.g. "CryptoPunks ownership" → `PunkBought`).
-2. Walks you through the chain.spaceandtime.io Studio UI flow (the CLI implementation is in progress; the Studio UI ships SCI today). The UI fetches the contract's verified ABI, lets you select events, and SXT auto-generates per-event tables under your namespace.
-3. Explains the indexing-window decision: the agent reads the SKILL.md's rubric to choose between historical-backfill (full contract history → wait for backfill, then query) and live-tail (forward-monitoring only). For "has wallet X ever done Y" questions it picks historical and tells you to poll `MIN(BLOCK_NUMBER)` until backfill reaches the contract's deployment block.
-4. Once the table has rows, runs the off-chain `/v1/zkquery` pre-flight to confirm the SCI table is on the proven surface BEFORE you spend 100 SXT on an on-chain `query()`.
-5. Writes the resulting table ref into `.last-publish.json` with `kind: "indexed-sci"` so downstream skills (`chain-data-query`, `render-onchain-query`, the deploy/query pipeline) auto-pick it up.
+2. Runs `examples/scripts/index-contract.mjs` — it submits the same `tables.createTableWithSciMetadata` extrinsic the Studio UI uses. Supply the event declaration directly (`--event-signature`, no API key) or let it fetch the verified ABI via Etherscan v2 (`--events` + `ETHERSCAN_API_KEY`). The chain.spaceandtime.io Studio UI remains an alternative (and is still needed to look up each table's funding address).
+3. Explains the indexing window honestly: SCI is **live-only today** — tables index from the current block forward, never from the contract's deployment block (historical mode is "coming soon" per the Studio UI). For "has wallet X ever done Y" questions it routes to `chain-data-query` against the pre-indexed `ETHEREUM.*` tables instead.
+4. Once the table has rows, runs the off-chain `/v1/zkquery` pre-flight — and sets expectations: SCI tables are not on the zk-proven surface yet, so today the pre-flight 422s. This is the gate that prevents wasting 100 SXT on an on-chain `query()`.
+5. Writes the resulting table ref into `.last-publish.json` with `kind: "indexed-sci"` so downstream skills (`chain-data-query`, `render-onchain-query`, the deploy/query pipeline) auto-pick it up when SCI joins the proven surface.
 
-**Canonical example:** CryptoPunks (`0xb47e3cd837dDF8e4c57F05d70Ab865de6e193BBB`). Picked because Punks has low-thousands of lifetime trades since 2017 → backfill completes in minutes, so the full pipeline is demoable in one sitting. Swap in any verified EVM contract by re-running with a different `--address` + `--events`.
+**Canonical example:** any verified ERC-721 — e.g. Pudgy Penguins (`0xBd3531dA5CF5857e7CfAA92426877b022e612cf8`) with `--event-signature "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)"`. Swap in any EVM contract by re-running with a different `--address` + event.
 
-**What you see in the conversation:** a Studio UI handoff, then once the table is live, a confirmation with the table ref (e.g. `<YOUR_NS>.PUNK_BOUGHT`) and a green-light from the `/v1/zkquery` pre-flight saying the table is ready to query.
+**What you see in the conversation:** the registration plan (DDL + metadata per event), the finalized block hashes, the funding instructions, and an honest note that proofs against the new tables stay blocked until SXT promotes SCI to the zk-committed catalog.
 
 ### `dreamspace-query:proof-of-sql-foundations` — the constraint guardrail
 

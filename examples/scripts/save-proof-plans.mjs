@@ -43,7 +43,11 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 //   2. .last-publish.json handoff (written by publish-dataset-cli.mjs)
 //   3. Legacy canonical-demo default (so re-running with no args reproduces
 //      the proof plans baked into StakersQuery.sol)
-const handoff = readLastPublish();
+let handoff = readLastPublish();
+// An indexed-sci handoff (written by index-contract.mjs) is not consumable by
+// the CSV proof pipeline — SCI tables aren't zk-provable yet. Ignore it so
+// env vars / legacy defaults win instead of resolving to an unprovable table.
+if (handoff?.kind === 'indexed-sci') handoff = null;
 
 const RPC = process.env.SXT_RPC_HTTP ?? 'https://rpc.mainnet.sxt.network';
 const TABLE = process.env.SXT_TABLE

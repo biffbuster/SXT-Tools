@@ -1,9 +1,15 @@
 {
   "name": "sxt-tools-examples",
-  "version": "0.1.0",
+  "version": "0.2.0-beta.1",
   "private": true,
   "type": "module",
-  "description": "Example scripts for sxt-tools — publish datasets to Space and Time mainnet and prove membership on Base mainnet via Proof of SQL.",
+  "description": "sxt-tools pipeline CLI — publish datasets to Space and Time mainnet and prove membership on Base mainnet via Proof of SQL. Community-built; not endorsed by Space and Time.",
+  "bin": {
+    "sxt": "./sxt.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "bootstrap": "node bootstrap.mjs",
     "publish": "node publish-dataset-cli.mjs",

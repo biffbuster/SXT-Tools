@@ -6,7 +6,7 @@
  * the surfaces that bootstrap.mjs doesn't:
  *
  *   - Plugin marketplace structure (marketplace.json + 3 plugin.json files)
- *   - SKILL.md frontmatter parses for all 5 skills
+ *   - SKILL.md frontmatter parses for all 7 skills
  *   - MCP server compiles + boots + lists 4 tools + 1 resource
  *   - Docs site reachable at localhost:3000 (if dev server running)
  *   - npm pack --dry-run produces a publishable tarball for sxt-mcp
@@ -276,7 +276,10 @@ if (!QUICK) {
 
 section("Docs site (localhost:3000 — optional)");
 
-await check("/docs reachable", async () => {
+// Informational only — the docs dev server is not a prerequisite for the
+// demo or the pipeline, so its absence must never block `npm run demo`
+// (a fresh clone fails here otherwise).
+await check("/docs reachable (optional)", async () => {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 1500);
   try {
@@ -285,7 +288,7 @@ await check("/docs reachable", async () => {
     return "200 OK";
   } catch (err) {
     if (err.name === "AbortError" || /ECONNREFUSED|fetch failed/.test(String(err))) {
-      throw new Error("dev server not running (start with `npm run dev` in repo root)");
+      return "dev server not running — skipped (start with `npm run dev` to include)";
     }
     throw err;
   } finally {
@@ -298,11 +301,14 @@ await check("/docs reachable", async () => {
 section("npm pack readiness (sxt-mcp)");
 
 await check("npm pack --dry-run", () => {
+  // shell:true so `npm` resolves to npm.cmd on Windows (bare spawnSync ENOENTs there).
   const r = spawnSync("npm", ["pack", "--dry-run", "--silent"], {
     cwd: MCP_DIR,
     encoding: "utf8",
+    shell: true,
   });
-  if (r.status !== 0) throw new Error(r.stderr.split("\n")[0]);
+  if (r.error) throw r.error;
+  if (r.status !== 0) throw new Error((r.stderr ?? "").split("\n")[0] || `exit ${r.status}`);
   // npm pack --dry-run prints the contents to stderr in npm 8+; just check exit code.
   return "tarball would build cleanly";
 });

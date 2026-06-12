@@ -63,7 +63,11 @@ function arg(flag, fallback) {
 
 // Resolve plan + schema using the handoff for forked users who just
 // published their own CSV. Explicit flags always win.
-const handoff = readLastPublish();
+let handoff = readLastPublish();
+// An indexed-sci handoff (written by index-contract.mjs) is not consumable by
+// the CSV proof pipeline — SCI tables aren't zk-provable yet. Ignore it so
+// env vars / legacy defaults win instead of resolving to an unprovable table.
+if (handoff?.kind === 'indexed-sci') handoff = null;
 const handoffPlanPath = handoff?.tableRef
   ? join(planDirFor(handoff.tableRef, BASE_PLAN_DIR), 'point-lookup.json')
   : null;

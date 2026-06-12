@@ -1,4 +1,4 @@
---
+---
 name: chain-data-query
 description: Query SXT-indexed Ethereum chain data with a Proof of SQL receipt — and consume the result inside a Solidity contract on Base via IQueryRouter.requestQuery. Use when the user wants to prove a wallet's onchain activity, verify a specific L1 transaction exists, confirm L1 block finality, or build any trust-minimized cross-chain primitive that depends on Ethereum history. Generates parameterized proof plans so one deployed contract serves any input. Pairs with proof-of-sql-foundations (the surface guardrail), pre-deploy-audit, and deploy-contract.
 ---
