@@ -24,7 +24,7 @@ const COMMANDS = {
   preflight: ['preflight.mjs', ['--read-only'], 'Install/manifest/MCP readiness checks (use `preflight:full` for chain checks)', 'free'],
   'preflight:full': ['preflight.mjs', [], 'Preflight including forge + env checks', 'free'],
   demo: ['demo-rehearsal.mjs', [], 'Read-only demo: live Proof of SQL + contract liveness', 'free (API quota)'],
-  publish: ['publish-dataset-cli.mjs', [], 'Publish a CSV as a chain-secured table:  sxt publish <csv> [PREFIX.TABLE]', '~0.001 SXT'],
+  publish: ['publish-dataset-cli.mjs', [], 'Publish a CSV as a chain-secured table:  sxt publish <csv> [PREFIX.TABLE]', '20 SXT/object (40 for first publish); ~0.001 to insert into existing table'],
   index: ['index-contract.mjs', [], 'Register a contract for SCI event indexing:  sxt index --address 0x… --chain ethereum --event-signature "event …"', '20 SXT burn/table'],
   verify: ['verify-table.mjs', [], 'Off-chain Proof of SQL against the active table (zero-cost gate before on-chain spend)', 'free (API quota)'],
   plan: ['save-proof-plans.mjs', [], 'Generate EVM proof plans for the active table', 'free'],

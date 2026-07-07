@@ -725,7 +725,9 @@ body::before {
   justify-content: center;
   gap: 2px;
   min-width: 0;
-  overflow-x: auto;
+  /* visible on desktop so the hover dropdown can escape the nav bar;
+     horizontal scroll is re-enabled for narrow screens in the media query. */
+  overflow: visible;
   scrollbar-width: none;
 }
 
@@ -789,6 +791,104 @@ body::before {
 .docs-pill-tab.active .docs-pill-count {
   background: rgba(236, 72, 153, 0.2);
   color: var(--hot-pink);
+}
+
+/* Quick start → skill-explainer dropdown */
+.docs-pill-tab-group {
+  position: relative;
+  display: inline-flex;
+}
+
+.docs-pill-caret {
+  color: rgba(255, 255, 255, 0.5);
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.docs-pill-tab-group:hover .docs-pill-caret,
+.docs-pill-tab-group:focus-within .docs-pill-caret {
+  color: #ffffff;
+  transform: rotate(180deg);
+}
+
+.docs-pill-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(6px);
+  padding-top: 10px; /* transparent bridge so the menu stays hoverable */
+  min-width: 320px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  z-index: 60;
+}
+
+.docs-pill-tab-group:hover .docs-pill-dropdown,
+.docs-pill-tab-group:focus-within .docs-pill-dropdown {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
+}
+
+.docs-pill-dropdown-panel {
+  background: #14141a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 8px;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.55);
+}
+
+.docs-pill-dropdown-label {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+  padding: 6px 10px 8px;
+}
+
+.docs-pill-dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+
+.docs-pill-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.docs-pill-dropdown-item-name {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.docs-pill-dropdown-item:hover .docs-pill-dropdown-item-name {
+  color: #ffffff;
+}
+
+.docs-pill-dropdown-item-tag {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.docs-pill-dropdown-item:hover .docs-pill-dropdown-item-tag {
+  color: var(--hot-pink);
+  background: rgba(236, 72, 153, 0.16);
 }
 
 .docs-pill-actions {
@@ -1085,6 +1185,9 @@ body::before {
   }
   .docs-pill-cta {
     display: none;
+  }
+  .docs-pill-tabs {
+    overflow-x: auto;
   }
   .docs-pill-tab {
     padding: 10px 12px;

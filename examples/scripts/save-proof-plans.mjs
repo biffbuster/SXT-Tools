@@ -223,16 +223,32 @@ const plans = [
   },
 ];
 
+// The SXT RPC's first connection from undici on Windows can hit a 10s connect
+// timeout then succeed — same cold-route quirk the other scripts retry around.
+async function rpcFetch(body, tries = 4) {
+  let lastErr;
+  for (let attempt = 1; attempt <= tries; attempt++) {
+    try {
+      return await fetch(RPC, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(20000),
+      });
+    } catch (err) {
+      lastErr = err;
+      if (!/fetch failed|TIMEOUT|ECONN|ETIMEDOUT|ABORT/i.test(String(err?.message ?? err))) throw err;
+    }
+  }
+  throw lastErr;
+}
+
 for (const plan of plans) {
-  const res = await fetch(RPC, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: plan.name,
-      method: 'commitments_v1_evmProofPlan',
-      params: { query: plan.sql },
-    }),
+  const res = await rpcFetch({
+    jsonrpc: '2.0',
+    id: plan.name,
+    method: 'commitments_v1_evmProofPlan',
+    params: { query: plan.sql },
   });
   const json = await res.json();
   if (!json.result?.proofPlan) {

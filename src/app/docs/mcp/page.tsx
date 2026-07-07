@@ -315,7 +315,7 @@ cd sxt-tools && npm install   # root postinstall builds the MCP server`}</code>
       <ul>
         <li>Each tool handler mirrors a canonical script under <code>examples/scripts/</code> line for line — no novel protocol logic to audit</li>
         <li><code>SAFETY.md</code> is the contract: phased rollout, mainnet double-gate, dependency surface per phase</li>
-        <li>The parity test (<code>mcp-parity-test.mjs</code>) proves the MCP wrapping matches the SDK directly, byte-for-byte</li>
+        <li>The parity test (<code>sxt parity</code>) proves the MCP wrapping matches the SDK directly, byte-for-byte</li>
         <li>Day 1 hardening is in place: <code>zod.strict()</code> input validation, audit path sandbox, structured logger, per-tool annotations</li>
       </ul>
       <p>

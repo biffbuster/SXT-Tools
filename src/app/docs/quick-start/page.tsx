@@ -25,35 +25,41 @@ export default function QuickStart() {
       <h3>Credentials</h3>
       <ul>
         <li><strong>SXT API key</strong> — free signup at <a href="https://chain.spaceandtime.io" target="_blank" rel="noopener noreferrer">chain.spaceandtime.io</a> → API Authentication</li>
-        <li><strong>Ethereum private key</strong> (0x-prefixed) — signs both SXT chain extrinsics and Base transactions. Generate with <code>node bootstrap.mjs --new-wallet</code> if you don&apos;t have one.</li>
+        <li><strong>Ethereum private key</strong> (0x-prefixed) — signs both SXT chain extrinsics and Base transactions. Generate with <code>sxt init</code> if you don&apos;t have one.</li>
       </ul>
 
       <h3>Funding (only for on-chain steps)</h3>
       <div className="docs-callout docs-callout-info">
         <div className="docs-callout-title">Funding requirements</div>
         <ul style={{ marginTop: 8, marginBottom: 0 }}>
-          <li><strong>SXT chain native</strong>: ≥ 1 SxT for publish fees. Fund via the <code>SXTChainFunding</code> contract on Ethereum mainnet (<code>0xb1bc1d7eb1e6c65d0de909d8b4f27561ef568199</code>): <code>approve</code> SXT, then <code>fundAddress(yourAddress, amount)</code>.</li>
+          <li><strong>SXT chain native</strong>: ≥ 40 SXT for a first publish. The chain burns 20 SXT per created object (namespace + each table; ~20.075 SXT with fees). Inserts into an existing table cost ~0.001 SXT. Fund via the <code>SXTChainFunding</code> contract on Ethereum mainnet (<code>0xb1bc1d7eb1e6c65d0de909d8b4f27561ef568199</code>): <code>approve</code> SXT, then <code>fundAddress(yourAddress, amount)</code>. <code>sxt status</code> reports the exact shortfall.</li>
           <li><strong>Base ETH</strong>: ~0.005 ETH for deploy + approve + query gas.</li>
           <li><strong>Base SXT (ERC-20)</strong>: ≥ 100 SXT per <code>query()</code>. Token: <code>0xA2c22252cDc8b7cDdEe1B0b2E242818509fCf7b8</code>.</li>
         </ul>
       </div>
 
       <h2 id="setup">1. Setup</h2>
+      <p>
+        Every step below runs through one command: <code>sxt</code>. It is a thin dispatcher over the pipeline scripts — <code>npm link</code> puts it on your PATH, or use <code>node sxt.mjs &lt;command&gt;</code> directly.
+      </p>
       <pre><code>{`$ git clone https://github.com/biffbuster/sxt-tools.git
 $ cd sxt-tools
 $ npm install                            # postinstall builds MCP + scripts deps
-$ cp examples/scripts/.env.example examples/scripts/.env
-$ # edit examples/scripts/.env — set SXT_API_KEY and PRIVATE_KEY`}</code></pre>
+$ cd examples/scripts
+$ npm link                               # \`sxt <command>\` available globally
+$ cp .env.example .env
+$ # edit .env — set SXT_API_KEY and PRIVATE_KEY
+$ sxt preflight                          # install / manifest / MCP health checks`}</code></pre>
 
-      <p>Verify wallet funding:</p>
-      <pre><code>{`$ cd examples/scripts && node bootstrap.mjs --status
+      <p>Verify wallet funding across all three networks:</p>
+      <pre><code>{`$ sxt status
 ▶ Verdict: GO — all prerequisites met. Pipeline can run end-to-end.`}</code></pre>
 
       <h2 id="verify">2. Verify the MCP server (free)</h2>
       <p>
         Run the parity test. It calls the same proven query two ways (through the MCP server and via the SDK directly), then diffs canonical results. If they match, the MCP wrapping is correct.
       </p>
-      <pre><code>{`$ node examples/scripts/mcp-parity-test.mjs
+      <pre><code>{`$ sxt parity
   Path A: via MCP server (sxt.run_proven_query tool)…  ✓ verified=true  ROW_COUNT=2062
   Path B: direct SDK call (verify-table.mjs equiv)…   ✓ verified=true  ROW_COUNT=2062
   ✓ Parity confirmed.`}</code></pre>
@@ -84,6 +90,56 @@ $ claude plugin install dreamspace-contracts@sxt-tools`}</code></pre>
         MCP and plugin changes don&apos;t apply to running sessions. Quit and reopen <code>claude</code> in the repo. Confirm with <code>/mcp</code> and <code>/plugin</code>.
       </div>
 
+      <h2 id="skills-commands">How each skill runs</h2>
+      <p>
+        Every skill wraps one battle-tested script. You can invoke it two ways: talk to the agent in natural language (it loads the <code>SKILL.md</code> and runs the workflow), or run the underlying <code>sxt</code> command yourself. Same code path either way.
+      </p>
+      <table className="comparison-table">
+        <thead>
+          <tr><th>Skill</th><th>What you say in Claude Code</th><th>Direct CLI</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>dataset-publish</strong></td>
+            <td>&quot;Publish <code>my.csv</code> to SXT as <code>MY_PROJECT.MEMBERS</code>.&quot;</td>
+            <td><code>sxt publish &lt;csv&gt; [PREFIX.TABLE]</code></td>
+          </tr>
+          <tr>
+            <td><strong>index-contract</strong></td>
+            <td>&quot;Index contract <code>0x…</code> events into an SXT table.&quot;</td>
+            <td><code>sxt index --address 0x… --chain ethereum --event-signature &quot;event …&quot;</code></td>
+          </tr>
+          <tr>
+            <td><strong>proof-of-sql-foundations</strong></td>
+            <td>&quot;Does this SQL fit the proven surface?&quot;</td>
+            <td>Reference skill — no command; the query skills load it as a guardrail.</td>
+          </tr>
+          <tr>
+            <td><strong>run-proven-query</strong></td>
+            <td>&quot;Prove membership in <code>MY_PROJECT.MEMBERS</code>.&quot;</td>
+            <td><code>sxt verify</code> (off-chain gate on the active table)</td>
+          </tr>
+          <tr>
+            <td><strong>chain-data-query</strong></td>
+            <td>&quot;Prove wallet <code>X</code> transacted with <code>Y</code> on Ethereum.&quot;</td>
+            <td><code>sxt chain-plan --table … --predicate … --param-types …</code></td>
+          </tr>
+          <tr>
+            <td><strong>pre-deploy-audit</strong></td>
+            <td>&quot;Audit <code>OnchainQuery.sol</code> before I deploy.&quot;</td>
+            <td>Skill-driven: <code>forge build</code> + <code>slither</code> + SXT cross-references → <code>AUDIT_REPORT.md</code></td>
+          </tr>
+          <tr>
+            <td><strong>deploy-contract</strong></td>
+            <td>&quot;Deploy <code>OnchainQuery.sol</code> to Base mainnet.&quot;</td>
+            <td><code>sxt render</code> → <code>forge build</code> → <code>sxt deploy</code></td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Free, zero-spend commands to explore first: <code>sxt status</code>, <code>sxt demo</code>, <code>sxt verify</code>, <code>sxt balance</code>, <code>sxt inspect &lt;txHash&gt;</code>. Run <code>sxt help</code> for the full list with per-command costs. Every paid command (<code>publish</code>, <code>deploy</code>, <code>query</code>, <code>index</code>) is gated behind its own confirmation prompt; mainnet writes require typing <code>mainnet</code>.
+      </p>
+
       <h2 id="demo-prompts">4. Demo prompts (free, against a real table)</h2>
       <p>
         The repo ships with one published table on SXT mainnet (<code>MY_AUDIT_V2_5731EC0BBEB5F7BCAA2E4BAF3179A7A4C59C2552.STAKERS</code>, 2,062 rows). Use it to exercise the wiring without spending on-chain.
@@ -105,10 +161,20 @@ Report verified=true/false for each.`}</code></pre>
       <p>Exercises both proof shapes the on-chain contracts use.</p>
 
       <h2 id="run">5. Run the full pipeline (~$10–15)</h2>
-      <pre><code>{`$ node bootstrap.mjs --run`}</code></pre>
+      <pre><code>{`$ sxt pipeline           # add --auto to skip prompts, --from=N to resume, --skip-onchain to stop before the 100-SXT climax`}</code></pre>
       <p>
-        Executes <strong>publish → save proof plans → render → compile → deploy → approve → query</strong> and stops on the first failure. Final output: the staker address from the verified callback event, four transaction hashes, and the deployed contract address.
+        Executes <strong>publish → save proof plans → render → compile → deploy → approve → query</strong> with a confirmation prompt between steps, and stops on the first failure. Final output: the staker address from the verified callback event, four transaction hashes, and the deployed contract address.
       </p>
+      <p>
+        Or run the steps yourself — each is one <code>sxt</code> command:
+      </p>
+      <pre><code>{`$ sxt publish ./my-members.csv MY_PROJECT.MEMBERS   # 20 SXT burned per object
+$ sxt verify                                        # THE GATE (free) — never skip before spending
+$ sxt plan                                          # EVM proof plans for the active table
+$ sxt render                                        # typed Solidity consumer from the plan
+$ (cd ../contracts/sxt-onchain-query && forge build)
+$ sxt deploy                                        # to Base, idempotent, gated confirmation
+$ sxt query                                         # 100 SXT — proof verified on-chain, callback fires`}</code></pre>
 
       <div className="docs-callout docs-callout-warning">
         <div className="docs-callout-title">Off-chain prove before on-chain spend</div>
@@ -117,15 +183,13 @@ Report verified=true/false for each.`}</code></pre>
 
       <h2 id="own-csv">Use your own CSV</h2>
       <p>
-        SXT auto-suffixes the namespace with your wallet&apos;s address. Same scripts, different inputs:
+        Pick any <code>UPPERCASE_SNAKE</code> prefix — SXT auto-suffixes the namespace with your wallet&apos;s address. <code>--lookup-column</code> pins which column the membership proof targets (needed only if your CSV has multiple <code>VARCHAR</code> columns); set <code>SXT_POINT_LOOKUP</code> to a value that exists in it.
       </p>
-      <pre><code>{`$ DEMO_CSV=/abs/path/to/your.csv \\
-    DEMO_TABLE_REF="DEMO.MYTABLE_$(date +%s)" \\
-    SXT_LOOKUP_COLUMN=EMAIL \\
-    SXT_POINT_LOOKUP=alice@example.com \\
-    npm run demo:fullpipeline`}</code></pre>
+      <pre><code>{`$ sxt publish ./my-members.csv MY_PROJECT.MEMBERS --lookup-column EMAIL
+$ SXT_POINT_LOOKUP=alice@example.com sxt verify    # off-chain gate on your table
+$ sxt plan && sxt render && sxt deploy && sxt query`}</code></pre>
       <p>
-        Seven steps with confirmation prompts between each. Add <code>--rehearse</code> to skip the 100-SXT climax, or <code>--from=N</code> to resume after a failure.
+        Every step after <code>publish</code> auto-discovers the table, schema, and lookup column from <code>.last-publish.json</code> (override per-run with <code>SXT_TABLE</code>, <code>SXT_SCHEMA_PATH</code>, <code>SXT_LOOKUP_COLUMN</code>). Or drive the whole thing with <code>sxt pipeline</code>, which prompts between each step; add <code>--skip-onchain</code> to skip the 100-SXT climax, or <code>--from=N</code> to resume after a failure.
       </p>
       <p>
         The renderer maps SQL types (<code>VARCHAR</code>, <code>BIGINT</code>, <code>BOOLEAN</code>, <code>TIMESTAMP</code>, <code>INT</code>, <code>BINARY</code>, <code>TINYINT</code>, <code>SMALLINT</code>) to the appropriate <code>ProofOfSqlTable</code> reader and emits a <code>QueryRow</code> event with one parameter per projected column.

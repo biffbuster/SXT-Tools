@@ -4,16 +4,30 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import ThemeToggle from "./ThemeToggle";
 
-const SKILLS_COUNT = 5;
+const SKILLS_COUNT = 7;
+
+// Skill explainer anchors. Each Skills-catalog card on /docs carries
+// id="skill-<name>", so these deep-link straight to that skill's explainer.
+// Keep in sync with SKILL_SPECS in src/app/docs/page.tsx.
+const SKILL_LINKS: Array<{ title: string; href: string; tag: string }> = [
+  { title: "dataset-publish", href: "/docs#skill-dataset-publish", tag: "Publish" },
+  { title: "index-contract", href: "/docs#skill-index-contract", tag: "Publish" },
+  { title: "proof-of-sql-foundations", href: "/docs#skill-proof-of-sql-foundations", tag: "Foundations" },
+  { title: "run-proven-query", href: "/docs#skill-run-proven-query", tag: "Query" },
+  { title: "chain-data-query", href: "/docs#skill-chain-data-query", tag: "Query" },
+  { title: "pre-deploy-audit", href: "/docs#skill-pre-deploy-audit", tag: "Audit" },
+  { title: "deploy-contract", href: "/docs#skill-deploy-contract", tag: "Deploy" },
+];
 
 const NAV_TABS: Array<{
   title: string;
   href: string;
   count?: number;
   matchExact?: boolean;
+  dropdown?: typeof SKILL_LINKS;
 }> = [
   { title: "Skills", href: "/docs", count: SKILLS_COUNT, matchExact: true },
-  { title: "Quick start", href: "/docs/quick-start" },
+  { title: "Quick start", href: "/docs/quick-start", dropdown: SKILL_LINKS },
   { title: "Workflows", href: "/docs/generate-audit-deploy" },
   { title: "Reference", href: "/docs/space-and-time" },
   { title: "MCP", href: "/docs/mcp" },
@@ -40,19 +54,64 @@ export default function DocsLayout({
           <div className="docs-pill-tabs" role="tablist">
             {NAV_TABS.map((tab) => {
               const active = isActive(tab.href, tab.matchExact);
-              return (
+              const tabLink = (
                 <Link
                   key={tab.href}
                   href={tab.href}
                   role="tab"
                   aria-selected={active}
+                  aria-haspopup={tab.dropdown ? "menu" : undefined}
                   className={`docs-pill-tab ${active ? "active" : ""}`}
                 >
                   <span>{tab.title}</span>
                   {tab.count !== undefined && (
                     <span className="docs-pill-count">{tab.count}</span>
                   )}
+                  {tab.dropdown && (
+                    <svg
+                      className="docs-pill-caret"
+                      width="10"
+                      height="10"
+                      viewBox="0 0 12 12"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M2 4.5l4 4 4-4"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  )}
                 </Link>
+              );
+
+              if (!tab.dropdown) {
+                return tabLink;
+              }
+
+              return (
+                <div key={tab.href} className="docs-pill-tab-group">
+                  {tabLink}
+                  <div className="docs-pill-dropdown" role="menu" aria-label={`${tab.title} skills`}>
+                    <div className="docs-pill-dropdown-panel">
+                      <div className="docs-pill-dropdown-label">Skill explainers</div>
+                      {tab.dropdown.map((item) => (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          role="menuitem"
+                          className="docs-pill-dropdown-item"
+                        >
+                          <span className="docs-pill-dropdown-item-name">{item.title}</span>
+                          <span className="docs-pill-dropdown-item-tag">{item.tag}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               );
             })}
             <Link href="/" className="docs-pill-tab">
