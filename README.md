@@ -4,7 +4,7 @@ Proof of SQL tooling for Space and Time. Publish data, register contracts for in
 
 ![version](https://img.shields.io/badge/version-0.2.0--beta.1-blue) ![node](https://img.shields.io/badge/node-%3E%3D20-brightgreen) ![license](https://img.shields.io/badge/license-MIT-lightgrey) ![platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows-informational)
 
-> Community-built, powered by Space and Time's public infrastructure. Not officially endorsed by Space and Time. Every command, cost, and limitation in this document was verified live on mainnet, most recently 2026-06-11 ([evidence](./CHANGELOG.md)). Reviewing this repo? Start at [`REVIEW.md`](./docs/REVIEW.md).
+> Community-built, powered by Space and Time's public infrastructure. Not officially endorsed by Space and Time. Every command, cost, and limitation in this document was verified live on mainnet, most recently 2026-06-11 ([evidence](./CHANGELOG.md)).
 
 ```
 $ sxt query
@@ -17,21 +17,6 @@ $ sxt query
 QueryRow  0x6de6e901bbefd26a9888798a25e4a49309d04ca9
 Verdict: 1 verified row(s) returned for the proven query.
 ```
-
-## Why this matters
-
-Smart contracts can't read databases, and oracles ask you to trust an operator. Proof of SQL removes the trust: every query result carries a ZK proof that the data was never tampered with and the SQL executed correctly. Anyone can check it in milliseconds, and a contract on Base can check it in about 150K gas. Not even the database operator can forge an answer. This CLI is the working pipeline from raw data to that proof.
-
-## What you can build
-
-| Use case | The unlock | How | Status |
-|---|---|---|---|
-| **Token gates and airdrops** that grant mints, access, or claims from an off-chain allowlist | No merkle snapshots, no signer backend; the list stays updatable off-chain | `sxt publish` your list, then the contract proves membership via `sxt query` | ✅ verified on mainnet |
-| **Compliance with cryptographic receipts**: prove an address is NOT on a sanctions or drainer list | Negative proofs are first-class; absence of a row is as provable as presence | `sxt publish`, then a negative lookup via `sxt verify` or `sxt query` | ✅ negative proofs verified |
-| **Wallet reputation from L1 history**: a Base contract reacts to proven Ethereum facts ("has this wallet ever used protocol X?") | One deployed contract answers for any wallet and any target; parameters bind at call time | `sxt chain-plan` on `ETHEREUM.TRANSACTIONS`, then `sxt query` | ✅ proofs and contract verified; on-chain parameterized callback pending first run |
-| **Verifiable data feeds**: any tabular dataset becomes an oracle whose answers carry math, not reputation | Prices, scores, attestations, game state. Consumers verify instead of trusting | `sxt publish`, consumers run `sxt verify` or on-chain `query()` | ✅ |
-| **AI agents that can't lie about data**: agent answers arrive with proofs attached | The MCP server returns proof-backed query results to any MCP client | `sxt parity` proves the wrapping; see [AI-native interfaces](#ai-native-interfaces) | ✅ |
-| **Your contract's events as queryable tables** | Any EVM contract's history becomes SQL without building an indexer | `sxt index` | ✅ registration live; proofs pending SXT's SCI promotion |
 
 ---
 
@@ -95,13 +80,23 @@ Every paid command is gated behind its own confirmation prompt; mainnet writes r
 
 ---
 
+## Funding (only for on-chain steps)
+
+The free path (`sxt demo`, `sxt verify`, `sxt plan`) needs no tokens. Publishing data and running on-chain `query()` spend SXT.
+
+**Buy $SXT (ERC-20 on Ethereum) directly on Uniswap:** https://app.uniswap.org/explore/tokens/ethereum/0xe6bfd33f52d82ccb5b37e16d3dd81f9ffdabb195
+
+- **SXT chain native** (publish and index): at least 40 SXT for a first publish. The chain burns 20 SXT per created object (namespace plus each table; measured live: 20.075 SXT including fees). Inserts into existing tables cost ~0.001 SXT. Fund via `SXTChainFunding` on Ethereum (`0xb1bc1d7eb1e6c65d0de909d8b4f27561ef568199`): `approve` SXT, then `fundAddress(yourAddress, amount)`.
+- **Base ETH:** ~0.005 ETH for deploy plus approve plus query gas.
+- **Base SXT (ERC-20):** 100 SXT per `query()`.
+
+`sxt status` reports exact shortfalls across all three networks.
+
+---
+
 ## Guide 1: your own dataset, proven on-chain
 
 A CSV on your laptop becomes a row a smart contract can trust.
-
-Fund first (`sxt status` reports exact shortfalls):
-- SXT chain native: at least 40 SXT for a first publish. The chain burns 20 SXT per created object (namespace plus each table; measured live: 20.075 SXT including fees). Inserts into existing tables cost ~0.001 SXT. Fund via `SXTChainFunding` on Ethereum (`0xb1bc1d7eb1e6c65d0de909d8b4f27561ef568199`).
-- Base: ~0.005 ETH gas plus 100 SXT ERC-20 per `query()`.
 
 ```bash
 # 1. Publish. Pick any UPPERCASE_SNAKE prefix; the chain suffixes your wallet hex
@@ -148,8 +143,6 @@ sxt render --plan ../data/proof-plans/collection-activity.json --name Collection
 # forge build, sxt deploy, then call query(wallet, anyCollectionAddress)
 ```
 
-Parameterization is a first-class SXT protocol feature. The rendered contract binds arguments via `ParamsBuilder` from SXT's own published Solidity client library, and the `$1`/`$2` plan comes from SXT's chain RPC. Status: plan generation, render, and compile are verified; the on-chain parameterized callback is the one leg not yet exercised by this repo's tests.
-
 Known `ETHEREUM.TRANSACTIONS` columns: `TIME_STAMP`, `BLOCK_NUMBER`, `TRANSACTION_HASH`, `TRANSACTION_INDEX`, `TRANSACTION_FEE`, `FROM_ADDRESS`, `TO_ADDRESS`. Prefer row-returning projections over `COUNT(*)` while the prover's aggregate path recovers (see Limitations).
 
 ---
@@ -168,9 +161,9 @@ sxt index \
 sxt index --address 0x… --chain ethereum --events Transfer,Approval
 ```
 
-The CLI submits the same `tables.createTableWithSciMetadata` extrinsic the SXT Studio UI uses (verified against live chain state; event params map to typed columns, and SQL reserved words auto-rename, e.g. `from`/`to` become `FROM_ADDRESS`/`TO_ADDRESS`). Supported chains are the SXT `Source` enum: `ethereum`, `sepolia`, `polygon`, `zksync`. Not Base (no enum variant on-chain yet).
+Supported chains are the SXT `Source` enum: `ethereum`, `sepolia`, `polygon`, `zksync` (not Base yet). Indexing is live-only (from the registration block forward, no historical backfill), and starting the indexer requires funding each table with at least 100 SXT via the per-table address shown at chain.spaceandtime.io.
 
-Status (June 2026): registration and data ingestion work; SCI tables are not on the zk-proven surface yet ("coming soon" per SXT docs), so `sxt verify` returns 422 against them and on-chain `query()` would not fulfill. Indexing is also live-only (from the registration block forward, no historical backfill), and starting the indexer requires funding each table with at least 100 SXT via the per-table address shown at chain.spaceandtime.io. For chain-history proofs that work today, use Guide 2.
+Status (June 2026): registration and data ingestion work, but SCI tables are not on the zk-proven surface yet ("coming soon" per SXT docs), so `sxt verify` returns 422 against them and on-chain `query()` would not fulfill. For chain-history proofs that work today, use Guide 2.
 
 ---
 
@@ -187,17 +180,14 @@ Status (June 2026): registration and data ingestion work; SCI tables are not on 
 | Proof callback latency | ~8 seconds observed | callback `0x5294361f…` |
 | Stuck query refund | `cancelQuery()` after the 1-hour timeout | `sxt inspect` decodes the Payment struct |
 
-The 20 SXT creation burn (`CREATE_COST` in the sxt-node tables pallet) is undocumented by SXT and was discovered here. `sxt publish` pre-checks your balance and fails fast with funding instructions instead of a cryptic `FundsUnavailable`.
-
 ---
 
 ## Known limitations (verified 2026-06-11)
 
-- Aggregates (`COUNT`, `SUM`) are mid-recovery at SXT's prover. They're in the official [PoSQL syntax spec](https://github.com/spaceandtimefdn/sxt-proof-of-sql/blob/main/docs/SQLSyntaxSpecification.md) and recovering table by table (`ETHEREUM.BLOCKS` works again; user tables pending). Point lookups and scans prove reliably. The prover also has brief instability windows while SXT deploys fixes; the CLI retries transient failures once automatically.
+- Aggregates (`COUNT`, `SUM`) are mid-recovery at SXT's prover, recovering table by table (`ETHEREUM.BLOCKS` works again; user tables pending). Point lookups and scans prove reliably.
 - The proven chain-data surface is narrow: `ETHEREUM.BLOCKS` plus `ETHEREUM.TRANSACTIONS` end-to-end. The rest of the catalog awaits commitment coverage.
 - SCI tables aren't provable yet (registration works; proofs "coming soon" per SXT).
-- SDK version is pinned at or below 0.55: `sxt-proof-of-sql-sdk` 0.56.1/0.57.1 ship a broken wasm bundle.
-- The SXT testnet WS RPC drops large frames (hangs every standard Substrate client on `state_getMetadata`); the CLI works around it by prefetching metadata over HTTP.
+- `sxt-proof-of-sql-sdk` is pinned at 0.54.0: 0.56.1/0.57.1 ship a broken wasm bundle.
 
 ---
 
@@ -212,29 +202,7 @@ The same pipeline is exposed as Claude Code skills (7 skills, 3 plugins) and a t
 /plugin install dreamspace-contracts@sxt-tools # pre-deploy-audit, deploy-contract
 ```
 
-The MCP server (`packages/mcp/sxt-mcp/`, stdio plus read-only HTTP) exposes `publish_dataset`, `run_proven_query`, `audit_contract`, and `deploy_contract`. It is testnet-default and mainnet double-gated (`mainnet: true` per call AND `SXT_MCP_ALLOW_MAINNET=I-UNDERSTAND` in env). Setup and security model: [`packages/mcp/sxt-mcp/README.md`](./packages/mcp/sxt-mcp/README.md), [`SAFETY.md`](./packages/mcp/sxt-mcp/SAFETY.md). Parity between MCP and direct SDK output is proven by `sxt parity`.
-
----
-
-## Architecture
-
-```
-        SXT chain (Substrate)                Base mainnet (EVM)
-        ─────────────────────                ──────────────────
- CSV ──publish──► table commitment           your consumer contract
- events ─index─►  (HyperKZG, finalized)        │ approve(100 SXT) + query()
-                       │                       ▼
-                       │                    QueryRouter ──► executor runs SQL,
-                       │                       │            generates Proof of SQL
-                       │                       ▼
-                       └── proof plan ──► OnchainVerifier (~150K gas)
-                           (free RPC)          │
-                                               ▼
-                                        callback → QueryRow event
-                                        (the cryptographic receipt)
-```
-
-Deep-dive: [`HOW_IT_WORKS.md`](./docs/HOW_IT_WORKS.md). Doc-conformance audit with live-chain evidence: [`docs-conformance.md`](./docs/docs-conformance.md).
+The MCP server (`packages/mcp/sxt-mcp/`, stdio plus read-only HTTP) exposes `publish_dataset`, `run_proven_query`, `audit_contract`, and `deploy_contract`. It is testnet-default and mainnet double-gated (`mainnet: true` per call AND `SXT_MCP_ALLOW_MAINNET=I-UNDERSTAND` in env). Setup and security model: [`packages/mcp/sxt-mcp/README.md`](./packages/mcp/sxt-mcp/README.md), [`SAFETY.md`](./packages/mcp/sxt-mcp/SAFETY.md).
 
 ---
 
@@ -246,9 +214,8 @@ Deep-dive: [`HOW_IT_WORKS.md`](./docs/HOW_IT_WORKS.md). Doc-conformance audit wi
 | Verifier (Base) | `0x13b7463a07Aac6Bd483E4329a7F6768Da1A65518` |
 | Verifier (Ethereum) | `0x55780Ba21EdFBbFEb7033a0F2FC5Cf55Cd62ACf9` |
 | SXT ERC-20 (Base) | `0xA2c22252cDc8b7cDdEe1B0b2E242818509fCf7b8` |
-| SXT ERC-20 (Ethereum) | `0xE6Bfd33F52d82Ccb5b37E16D3dD81f9FFDAbB195` |
+| SXT ERC-20 (Ethereum) | `0xE6Bfd33F52d82Ccb5b37E16D3dD81f9FFDAbB195` ([buy on Uniswap](https://app.uniswap.org/explore/tokens/ethereum/0xe6bfd33f52d82ccb5b37e16d3dd81f9ffdabb195)) |
 | SXTChainFunding (Ethereum) | `0xb1bc1d7eb1e6c65d0de909d8b4f27561ef568199` |
-| Live demo consumer (verification artifact) | `0x3cE11F70FdDbb69994431c24C74f66D7016f7b73` (Base) |
 
 ---
 
@@ -263,24 +230,16 @@ Deep-dive: [`HOW_IT_WORKS.md`](./docs/HOW_IT_WORKS.md). Doc-conformance audit wi
 | `401 SECURITY: Invalid JWT` | Raw API key used as Bearer. Exchange at `proxy.api.makeinfinite.dev/auth/apikey` first; all CLI commands do this automatically. |
 | `fetch failed` / `TIMEOUT` once, works on retry | Cold-connection flake (slow resolver or IPv6 routes). Demo, verify, and parity retry once automatically; just re-run other commands. |
 | `forge build`: "Identifier already declared" | `forge clean && forge soldeer install` |
-| Hangs connecting to `wss://rpc.testnet.sxt.network` | SXT's testnet WS drops the metadata frame. `sxt index` has a built-in HTTP-prefetch workaround; other scripts: use mainnet or wait for SXT's fix. |
-| `npm install` pulls a broken `sxt-proof-of-sql-sdk` | Don't upgrade past 0.55.x; 0.56.1/0.57.1 ship a broken wasm bundle. The lockfile pins 0.54.0. |
+| `npm install` pulls a broken `sxt-proof-of-sql-sdk` | Don't upgrade past 0.54.0; 0.56.1/0.57.1 ship a broken wasm bundle. |
 
 ---
 
-## For reviewers and contributors
+## More
 
-- [`REVIEW.md`](./docs/REVIEW.md): end-to-end walkthrough, every feature tested via CLI with expected outputs, exact costs, and the mainnet evidence from our own runs.
-- [`BETA.md`](./docs/BETA.md): beta onboarding plus the GA promotion checklist.
-- [`CHANGELOG.md`](./CHANGELOG.md): versioned history with verification evidence.
+- Architecture deep-dive: [`HOW_IT_WORKS.md`](./docs/HOW_IT_WORKS.md)
+- Reviewer walkthrough with mainnet evidence: [`REVIEW.md`](./docs/REVIEW.md) · beta onboarding: [`BETA.md`](./docs/BETA.md) · [`CHANGELOG.md`](./CHANGELOG.md)
 - [`CONTRIBUTING.md`](./.github/CONTRIBUTING.md) · [`SECURITY.md`](./.github/SECURITY.md)
-- Verification suite: `sxt preflight` (21 checks), `node --check` over all scripts, `forge build`, `sxt parity`.
-
-## References
-
-- [Space and Time docs](https://docs.spaceandtime.io) · [PoSQL syntax spec](https://github.com/spaceandtimefdn/sxt-proof-of-sql/blob/main/docs/SQLSyntaxSpecification.md)
-- [`spaceandtimefdn/sxt-chain-examples`](https://github.com/spaceandtimefdn/sxt-chain-examples): canonical examples this CLI's publish flow mirrors
-- [`spaceandtimefdn/sxt-proof-of-sql-sdk`](https://github.com/spaceandtimefdn/sxt-proof-of-sql-sdk): the SDK wrapped by `sxt verify` and `sxt demo`
+- [Space and Time docs](https://docs.spaceandtime.io) · [PoSQL syntax spec](https://github.com/spaceandtimefdn/sxt-proof-of-sql/blob/main/docs/SQLSyntaxSpecification.md) · [sxt-chain-examples](https://github.com/spaceandtimefdn/sxt-chain-examples) · [sxt-proof-of-sql-sdk](https://github.com/spaceandtimefdn/sxt-proof-of-sql-sdk)
 
 ## License
 
