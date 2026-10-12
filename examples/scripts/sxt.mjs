@@ -2,8 +2,7 @@
 /**
  * sxt — unified CLI over the sxt-tools pipeline.
  *
- * Community-built tooling on public Space and Time protocol surfaces.
- * NOT endorsed or supported by Space and Time. Every command is a thin
+ * Built in partnership with Space and Time. Every command is a thin
  * dispatcher onto the battle-tested script it names — no new protocol
  * logic lives here, so the underlying scripts remain the audit surface.
  *
@@ -35,12 +34,13 @@ const COMMANDS = {
   inspect: ['inspect-query.mjs', [], 'Decode a query tx lifecycle:  sxt inspect <txHash>', 'free'],
   balance: ['check-eth-sxt-balance.mjs', [], 'ETH + SXT (ERC-20) balances and QueryRouter allowance', 'free'],
   parity: ['mcp-parity-test.mjs', [], 'Prove the MCP server matches direct SDK output', 'free (API quota)'],
+  upstream: ['check-upstream.mjs', [], 'Detect drift against live SXT: pinned SDK, contract addresses, RPC methods, aggregate status', 'free (1 API quota tick)'],
   pipeline: ['demo-fullpipeline.mjs', [], 'Full pipeline orchestrator (publish → … → query). Flags: --auto --fresh --from=N --skip-onchain', 'up to ~100 SXT'],
 };
 
 function printHelp() {
   console.log(`
-sxt — Space and Time Proof-of-SQL pipeline CLI  (community tool, not endorsed by SXT)
+sxt — Space and Time Proof-of-SQL pipeline CLI  (built in partnership with Space and Time)
 
 Usage: sxt <command> [args]
 

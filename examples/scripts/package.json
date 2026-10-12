@@ -3,7 +3,7 @@
   "version": "0.2.0-beta.1",
   "private": true,
   "type": "module",
-  "description": "sxt-tools pipeline CLI — publish datasets to Space and Time mainnet and prove membership on Base mainnet via Proof of SQL. Community-built; not endorsed by Space and Time.",
+  "description": "sxt-tools pipeline CLI — publish datasets to Space and Time mainnet and prove membership on Base mainnet via Proof of SQL. Built in partnership with Space and Time.",
   "bin": {
     "sxt": "./sxt.mjs"
   },

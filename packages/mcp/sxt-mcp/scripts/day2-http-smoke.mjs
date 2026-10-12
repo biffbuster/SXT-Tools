@@ -4,7 +4,7 @@
  *
  * Spawns the compiled HTTP MCP server on an ephemeral high port and verifies:
  *
- *   1. tools/list exposes ONLY sxt.run_proven_query (read-only allowlist)
+ *   1. tools/list exposes ONLY the read-only allowlist (run_proven_query, generate_proof_plan)
  *   2. The other three tools are NOT listed (no accidental write-surface leak)
  *   3. Calling a hidden tool by name returns "Unknown tool" (no bypass)
  *   4. Bad Host header → 403 (DNS rebinding defense)
@@ -25,6 +25,9 @@ const MCP_HTTP = resolve(HERE, "..", "dist", "http.js");
 const PORT = 30000 + Math.floor(Math.random() * 10000);
 const BEARER = "test-bearer-" + Math.random().toString(36).slice(2);
 const BASE = `http://127.0.0.1:${PORT}/mcp`;
+
+// Must match HTTP_READ_ONLY_TOOLS in src/server.ts (sorted).
+const READ_ONLY = ["sxt.generate_proof_plan", "sxt.get_proof_result", "sxt.run_proven_query"];
 
 const results = [];
 function check(name, pass, detail = "") {
@@ -137,9 +140,9 @@ async function caseToolsListReadOnly(child) {
   const tools = frame.result?.tools ?? [];
   const names = tools.map((t) => t.name).sort();
   const onlyAllowed =
-    names.length === 1 && names[0] === "sxt.run_proven_query";
+    JSON.stringify([...names].sort()) === JSON.stringify(READ_ONLY);
   check(
-    "tools/list exposes ONLY sxt.run_proven_query",
+    "tools/list exposes ONLY the read-only allowlist",
     onlyAllowed,
     onlyAllowed ? "" : `got: ${names.join(", ")}`,
   );
@@ -312,8 +315,8 @@ async function caseBearerEnforced(child) {
   const frame = await readRpcResponse(list);
   const tools = frame.result?.tools ?? [];
   check(
-    "correct bearer + tools/list returns 1 tool",
-    tools.length === 1 && tools[0].name === "sxt.run_proven_query",
+    "correct bearer + tools/list returns the read-only allowlist",
+    JSON.stringify(tools.map((t) => t.name).sort()) === JSON.stringify(READ_ONLY),
     `got ${tools.length} tools`,
   );
 }

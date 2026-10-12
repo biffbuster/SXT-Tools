@@ -19,11 +19,12 @@
  *      rejected by the indexing pallet with ArrowExpectedRecordBatchMessage.
  */
 
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { z } from "zod";
 import { loadConfig } from "../lib/config.js";
 import { MissingCredentialError } from "../lib/errors.js";
 import { selectNetwork } from "../lib/network.js";
+import { logger } from "../lib/logger.js";
 
 export const publishDatasetSchema = z
   .object({
@@ -98,7 +99,7 @@ type SqlType =
   | "BINARY"
   | "TIMESTAMP";
 
-function inferColumnTypes(rows: Record<string, string>[]): Record<string, SqlType> {
+export function inferColumnTypes(rows: Record<string, string>[]): Record<string, SqlType> {
   if (rows.length === 0) {
     throw new Error("CSV has no rows — cannot infer schema. Pass schema explicitly.");
   }
@@ -111,6 +112,18 @@ function inferColumnTypes(rows: Record<string, string>[]): Record<string, SqlTyp
       types[col] = "VARCHAR";
     } else if (/^-?\d+$/.test(String(v))) {
       types[col] = "BIGINT";
+    } else if (/^-?(\d+\.\d*|\.\d+)([eE][-+]?\d+)?$/.test(String(v))) {
+      // DECIMAL75 has no Arrow encoder here. Refuse up front rather than
+      // typing the column VARCHAR behind the user's back (which would silently
+      // kill numeric comparison on chain) or emitting DECIMAL and crashing at
+      // the encoder AFTER createTables has already been paid for.
+      throw new Error(
+        `Column "${col}" looks like a decimal (first value: "${v}"). This server has no ` +
+          `DECIMAL75 Arrow encoder, so the column cannot be published as a numeric type. ` +
+          `Options: (1) pass an explicit schema typing "${col}" as VARCHAR to store it as text ` +
+          `(no numeric comparison on chain); (2) scale the values to integers and type it ` +
+          `BIGINT; (3) load the table via chain.spaceandtime.io, which supports DECIMAL75.`,
+      );
     } else if (/^(true|false)$/i.test(String(v))) {
       types[col] = "BOOLEAN";
     } else if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}/.test(String(v))) {
@@ -131,6 +144,102 @@ function buildCreateStatement(
   // NO PRIMARY KEY — tables with PK silently break catalog promotion.
   const lines = Object.entries(columnTypes).map(([col, t]) => `  ${col} ${t} NOT NULL`);
   return `CREATE TABLE ${namespace}.${table} (\n${lines.join(",\n")}\n)`;
+}
+
+/** Matches the pallet's "this already exists" family. Mirrors publish-dataset-cli.mjs:382. */
+function isAlreadyExistsError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /VersionAlreadyExists|TableAlreadyExists|NamespaceAlreadyExists|already exists/i.test(msg);
+}
+
+/**
+ * Build a verification query the prover will actually accept.
+ *
+ * COUNT(*) and other aggregates currently fail at the prover with null
+ * AttestedCommitments (see mcp-parity-test.mjs and README "Prover status"), so
+ * a point lookup against a real row is the only reliable self-check. Prefers
+ * the first VARCHAR column to match how save-proof-plans.mjs picks its lookup
+ * target; falls back to the first column of any type.
+ */
+function buildVerifySql(
+  namespace: string,
+  table: string,
+  columnTypes: Record<string, SqlType>,
+  rows: Record<string, string>[],
+): string {
+  const entries = Object.entries(columnTypes);
+  const picked = entries.find(([, t]) => t === "VARCHAR") ?? entries[0];
+  if (!picked) return `SELECT * FROM ${namespace}.${table}`;
+  const [col, sqlType] = picked;
+  const raw = rows[0]?.[col] ?? "";
+  const literal =
+    sqlType === "VARCHAR" || sqlType === "BINARY" || sqlType === "TIMESTAMP"
+      ? `'${String(raw).replace(/'/g, "''")}'`
+      : String(raw);
+  return `SELECT ${col} FROM ${namespace}.${table} WHERE ${col} = ${literal}`;
+}
+
+// ─── Value coercion ────────────────────────────────────────────────────────
+
+/**
+ * csv-parse hands back strings for every cell. Apache Arrow's typed builders do
+ * NOT parse them: `vectorFromArray(["true","false"], new Bool())` yields
+ * [false, false] (every boolean silently wrong, and the HyperKZG proof then
+ * attests to the wrong data), and a TimestampMillisecond builder throws
+ * "Cannot convert <iso> to a BigInt". Coerce to the JS types Arrow expects
+ * before building any vector.
+ *
+ * Ported from examples/scripts/publish-dataset-cli.mjs `coerceValues`, with
+ * unparseable values promoted from silent fallbacks to hard errors — a bad
+ * value published under a proof is worse than a failed publish.
+ */
+export function coerceValues(values: (string | undefined)[], sqlType: SqlType, col: string): unknown[] {
+  const bad = (v: unknown, expected: string): never => {
+    throw new Error(
+      `Column "${col}" is typed ${sqlType} but contains the value ${JSON.stringify(v)}, ` +
+        `which is not ${expected}. Fix the CSV or pass an explicit schema typing "${col}" as VARCHAR.`,
+    );
+  };
+
+  switch (sqlType) {
+    case "BOOLEAN":
+      return values.map((v) => {
+        const s = String(v ?? "").trim().toLowerCase();
+        if (s === "true" || s === "1") return true;
+        if (s === "false" || s === "0") return false;
+        return bad(v, 'one of true/false/1/0');
+      });
+
+    case "TINYINT":
+    case "SMALLINT":
+    case "INT":
+    case "INTEGER":
+      return values.map((v) => {
+        const s = String(v ?? "").trim();
+        if (!/^-?\d+$/.test(s)) return bad(v, "an integer");
+        return Number(s);
+      });
+
+    case "BIGINT":
+      return values.map((v) => {
+        const s = String(v ?? "").trim();
+        if (!/^-?\d+$/.test(s)) return bad(v, "an integer");
+        return BigInt(s);
+      });
+
+    case "TIMESTAMP":
+      return values.map((v) => {
+        const s = String(v ?? "").trim();
+        if (/^-?\d+$/.test(s)) return BigInt(s); // already epoch millis
+        const ms = Date.parse(s);
+        if (Number.isNaN(ms)) return bad(v, "epoch milliseconds or an ISO 8601 datetime");
+        return BigInt(ms);
+      });
+
+    default:
+      // VARCHAR and BINARY take the raw strings.
+      return values.map((v) => String(v ?? ""));
+  }
 }
 
 // ─── Promise-wrapped signAndSend ───────────────────────────────────────────
@@ -248,6 +357,24 @@ export async function publishDatasetHandler(args: PublishDatasetArgs) {
     columnTypes = inferColumnTypes(rows);
   }
 
+  // ─── Pre-flight the encode BEFORE spending ──────────────────────────
+  // createTables costs 20-40 SXT and is submitted below. Any value that the
+  // Arrow encoder would reject must surface here, at zero cost, rather than
+  // after the table has been created and paid for.
+  for (const [col, sqlType] of Object.entries(columnTypes)) {
+    if (!(col in (rows[0] ?? {}))) {
+      throw new Error(
+        `Schema declares column "${col}" but the CSV header does not contain it. ` +
+          `CSV columns: ${Object.keys(rows[0] ?? {}).join(", ")}`,
+      );
+    }
+    coerceValues(
+      rows.map((r) => r[col]),
+      sqlType,
+      col,
+    );
+  }
+
   // ─── Derive wallet + namespace ──────────────────────────────────────
   const { Wallet } = await import("ethers");
   const wallet = new Wallet(config.privateKey);
@@ -292,7 +419,7 @@ export async function publishDatasetHandler(args: PublishDatasetArgs) {
       0,
       `CREATE SCHEMA IF NOT EXISTS ${namespace}`,
       args.tableType,
-      { UserCreated: "sxt-mcp-v0.1.0" },
+      { UserCreated: "sxt-mcp-v0.1.1" },
     );
     const createTablesTx = tablesTx.createTables([
       {
@@ -300,7 +427,7 @@ export async function publishDatasetHandler(args: PublishDatasetArgs) {
         createStatement,
         tableType: args.tableType,
         commitment: { Empty: { hyperKzg: true } },
-        source: { UserCreated: "sxt-mcp-v0.1.0" },
+        source: { UserCreated: "sxt-mcp-v0.1.1" },
       },
     ]);
     const batchTx = utilityTx.batchAll([createNamespaceTx, createTablesTx]);
@@ -316,11 +443,27 @@ export async function publishDatasetHandler(args: PublishDatasetArgs) {
         api as unknown as ApiLike,
       );
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (/VersionAlreadyExists|TableAlreadyExists|NamespaceAlreadyExists|already exists/i.test(msg)) {
-        alreadyExisted = true;
-      } else {
-        throw err;
+      if (!isAlreadyExistsError(err)) throw err;
+
+      // batchAll is ATOMIC. When createNamespace fails because the namespace
+      // already exists (the common case for every publish after the first from
+      // a given wallet), the whole batch rolls back and createTables never
+      // landed. Proceeding straight to submitData here would fail with
+      // indexing.UnauthorizedSubmitter. Re-submit createTables on its own
+      // against the existing namespace.
+      // Mirrors examples/scripts/publish-dataset-cli.mjs:393-414.
+      alreadyExisted = true;
+      try {
+        createTxHash = await submitTx(
+          "createTables (fallback, existing namespace)",
+          createTablesTx,
+          signer,
+          signer.address,
+          api as unknown as ApiLike,
+        );
+      } catch (err2) {
+        // Table itself already exists too — nothing to create, go insert.
+        if (!isAlreadyExistsError(err2)) throw err2;
       }
     }
 
@@ -362,7 +505,10 @@ export async function publishDatasetHandler(args: PublishDatasetArgs) {
               "use the chain.spaceandtime.io UI for that until v0.2.0.",
           );
       }
-      vectors[col] = arrow.vectorFromArray(colValues as never, arrowType as never);
+      // Coerce strings to the JS types Arrow's typed builders expect. Skipping
+      // this silently corrupts BOOLEAN columns and throws on TIMESTAMP.
+      const coerced = coerceValues(colValues, sqlType, col);
+      vectors[col] = arrow.vectorFromArray(coerced as never, arrowType as never);
     }
     const arrowTable = new arrow.Table(vectors as never);
     const ipc = arrow.tableToIPC(arrowTable);
@@ -406,6 +552,32 @@ export async function publishDatasetHandler(args: PublishDatasetArgs) {
       "0x" + Buffer.from(ipc).toString("hex"),
     );
 
+    // Write the inferred schema next to the caller's own CSV, matching what
+    // publish-dataset-cli.mjs produces. This is what makes the pipeline
+    // schema-agnostic: save-proof-plans.mjs and render-onchain-query.mjs both
+    // read this artifact.
+    //
+    // Isolation: the target is derived from the caller's input path, so each
+    // user's artifact lands in their own directory. The server keeps no shared
+    // handoff file, and a failed write never fails the publish — the schema is
+    // also returned inline in the response.
+    let schemaPath: string | null = null;
+    try {
+      const target = args.file.replace(/\.csv$/i, "") + ".inferred-schema.json";
+      await writeFile(
+        target,
+        JSON.stringify(
+          { table: `${namespace}.${table}`, network: network.network, columns: columnTypes },
+          null,
+          2,
+        ) + "\n",
+        "utf8",
+      );
+      schemaPath = target;
+    } catch (err) {
+      logger.debug(`schema writeout skipped: ${err instanceof Error ? err.message : err}`);
+    }
+
     let insertTxHash: string;
     try {
       insertTxHash = await submitTx(
@@ -439,9 +611,15 @@ export async function publishDatasetHandler(args: PublishDatasetArgs) {
       alreadyExisted,
       network: network.network,
       schema: columnTypes,
+      schemaPath,
+      nextStep:
+        `Compile this table into an on-chain proof plan with sxt.generate_proof_plan, using ` +
+        `mainnet: ${args.mainnet} to match where it was published.`,
       verifyHint:
         `Use sxt.run_proven_query with tableRef "${namespace}.${table}" and ` +
-        `sql "SELECT COUNT(*) FROM ${namespace}.${table}" to confirm the published row count.`,
+        `sql "${buildVerifySql(namespace, table, columnTypes, rows)}". ` +
+        "Note: do NOT verify with SELECT COUNT(*) — aggregates currently fail at the prover " +
+        "(null AttestedCommitments). Use a point lookup like the one above.",
     };
   } finally {
     await api.disconnect();

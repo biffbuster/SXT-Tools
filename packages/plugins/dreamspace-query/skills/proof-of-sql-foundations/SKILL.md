@@ -25,7 +25,7 @@ When the user wants a verifiable result, every clause and operator must come fro
 - **Comparison**: `=`, `!=`, `>=`, `<=`, `>`, `<` (decimal inequality only up to 38 digits)
 - **Logical**: `AND`, `OR`, `NOT`
 - **Arithmetic**: `+`, `-`, `*`
-- **Aggregates**: `SUM`, `COUNT` — ⚠ empirically failing at the prover as of 2026-06-10 (`failed to deserialize prover response json: … expected struct AttestedCommitments` via `/v1/zkquery`, all working SDK versions). They are *in* the documented surface but don't execute today; prefer point lookups/scans and re-test with `node verify-table.mjs` before promising aggregates.
+- **Aggregates**: `SUM`, `COUNT` — ⚠ empirically failing at the prover as of 2026-06-10 (`failed to deserialize prover response json: … expected struct AttestedCommitments` via `/v1/zkquery`, all working SDK versions). They are *in* the documented surface (SXT's own docs describe the prover as evaluating filters, joins, group-bys and aggregations) but don't execute today; prefer point lookups/scans. **Re-probe with `sxt upstream` before promising or continuing to refuse aggregates** — it reports whether the failure still reproduces and names every file to update if it has been fixed.
 - **Column types**: `Boolean`, `Uint8`, `TinyInt`, `SmallInt`, `Int`, `BigInt`, `Int128`, `Decimal75`, `Varchar`, `Varbinary`, `Timestamp`
 
 The identifier `count` is reserved and cannot be used as a column alias.

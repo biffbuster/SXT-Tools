@@ -9,6 +9,7 @@ export type SkillCard = {
   lifecycle: string;
   highlights: string[];
   languages: string[];
+  command?: string;
   githubUrl: string;
   // "stable" — ready to invoke today. "coming-soon" — scaffolded on the
   // catalog so the roadmap is honest; SKILL.md documents the current
@@ -100,6 +101,13 @@ export default function SkillsCatalog({ skills }: { skills: SkillCard[] }) {
             </header>
 
             <p className="skills-card-desc">{s.description}</p>
+
+            {s.command && (
+              <div className="skills-card-command" aria-label="CLI command">
+                <span className="scc-prompt">$</span>
+                <code>{s.command}</code>
+              </div>
+            )}
 
             <div className="skills-card-meta">
               <div className="skills-card-models" aria-label="Supported AI runtimes">

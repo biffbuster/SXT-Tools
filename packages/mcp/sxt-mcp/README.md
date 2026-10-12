@@ -6,10 +6,10 @@ The package ships two binaries.
 
 | Binary | Transport | Tools exposed | Use |
 |---|---|---|---|
-| `sxt-mcp` | stdio | All four (`publish_dataset`, `run_proven_query`, `audit_contract`, `deploy_contract`) | Claude Desktop, Claude Code, Cursor |
-| `sxt-mcp-http` | Streamable HTTP | Read-only `run_proven_query` | ChatGPT Developer Mode connector, custom web-MCP clients |
+| `sxt-mcp` | stdio | All six (`publish_dataset`, `generate_proof_plan`, `run_proven_query`, `get_proof_result`, `audit_contract`, `deploy_contract`) | Claude Desktop, Claude Code, Cursor |
+| `sxt-mcp-http` | Streamable HTTP | Read-only `run_proven_query`, `get_proof_result`, `generate_proof_plan` | Hosted connector for Claude, ChatGPT, Cursor and any remote MCP client |
 
-The HTTP binary deliberately narrows to one tool. Publish and deploy need a private key; audit needs filesystem access. Neither belongs on a network-exposed connector. Read-only proof queries do, and that is what `sxt-mcp-http` exposes.
+The HTTP binary deliberately narrows to read-only tools. Publish and deploy need a private key; audit needs filesystem access. Neither belongs on a network-exposed connector. Proof queries and plan compilation do, and that is what `sxt-mcp-http` exposes. In public mode every user signs in with their own SXT API key, so queries are billed to the caller's own account.
 
 Each handler mirrors the canonical script under `examples/scripts/` line-for-line. The server is a protocol adapter, not a re-implementation.
 
@@ -20,7 +20,9 @@ Each handler mirrors the canonical script under `examples/scripts/` line-for-lin
 | Tool | Cost surface | Mirror script |
 |---|---|---|
 | `sxt.publish_dataset` | SXT chain credits per row | `examples/scripts/publish-dataset-cli.mjs` |
-| `sxt.run_proven_query` | One `/v1/zkquery` API tick | `examples/scripts/verify-table.mjs` |
+| `sxt.run_proven_query` | One `/v1/zkquery` API tick | `examples/scripts/verify-table.mjs` (request sequence of the SDK's `queryAndVerify`, with an owned poll loop; see SAFETY.md) |
+| `sxt.get_proof_result` | None (resumes a pending proof) | none |
+| `sxt.generate_proof_plan` | None (chain RPC read) | `examples/scripts/save-proof-plans.mjs` |
 | `sxt.audit_contract` | None (pure local `forge build` + `slither`) | `examples/scripts/audit-with-sxt.mjs` |
 | `sxt.deploy_contract` | ~$0.50 ETH gas | `examples/scripts/deploy-onchain-query.mjs` |
 | `sxt://docs/proof-of-sql-foundations` | None (MCP resource, Markdown) | `packages/plugins/dreamspace-query/skills/proof-of-sql-foundations/SKILL.md` |
@@ -29,7 +31,7 @@ Each handler mirrors the canonical script under `examples/scripts/` line-for-lin
 
 ## Status
 
-`v0.1.0`. All four tools are live. Mainnet operations are enabled behind the double-gate. The package is marked `private: true` in `package.json` until the Tier 2 polish lands (error sanitizer, structured audit log, vitest suite). Until then, install by building from source.
+`v0.4.0`. All six tools are live. Mainnet operations are enabled behind the double-gate. The HTTP binary runs as a hosted, multi-user connector with OAuth 2.1 and bring-your-own SXT key (see "Hosted deployment"). The package is still marked `private: true` in `package.json`; install by building from source until it is published.
 
 ---
 
@@ -47,8 +49,8 @@ npm run build
 Run the smoke tests. Both are zero-cost. Neither calls SXT.
 
 ```bash
-node scripts/day1-smoke.mjs        # stdio: 4 protocol checks
-node scripts/day2-http-smoke.mjs   # http:  12 protocol + security checks
+npm test                           # vitest: sealed tokens, sanitizer, rate limit, full OAuth flow
+npm run smoke                      # day1 (stdio) + day2 (http, 12 protocol + security checks)
 ```
 
 ---
@@ -96,6 +98,38 @@ SXT_MCP_BIND_HOST="0.0.0.0" \
 The HTTP entrypoint refuses to start a non-loopback bind without `SXT_MCP_HTTP_BEARER` set. Constant-time bearer comparison defeats length-leaking timing attacks. Host header allowlist and Origin header allowlist run before any MCP handler.
 
 For ChatGPT, tunnel the loopback server to a public HTTPS URL (`cloudflared`, `ngrok`) and paste the URL plus the bearer into the Developer Mode connector dialog.
+
+## Hosted deployment
+
+Public mode turns the HTTP binary into a hosted connector, like any remote MCP server: users add one URL to their client and sign in once in the browser.
+
+```bash
+SXT_MCP_PUBLIC_URL=https://mcp.example.com \
+SXT_MCP_TOKEN_SECRET="$(node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))")" \
+SXT_MCP_BIND_HOST=0.0.0.0 \
+  node dist/http.js
+```
+
+Production runs on **Cloudflare Workers**, the same edge platform the major data-provider MCP servers sit behind:
+
+```bash
+npx wrangler secret put SXT_MCP_TOKEN_SECRET
+npm run deploy:worker          # extracts the verifier WASM, then wrangler deploy
+```
+
+Set `SXT_MCP_PUBLIC_URL` in `wrangler.jsonc` and attach a custom domain. `npm run dev:worker` runs it locally under `workerd`. `SAFETY.md` → "Hosting: Cloudflare Workers" covers how the Worker differs.
+
+As a fallback, build the image from this directory with `docker build -t sxt-mcp .` and run it with the same two variables. The image honours the platform's `PORT`, logs JSON to stderr, and answers `/healthz` and `/readyz`.
+
+How a user connects:
+
+1. Add `https://mcp.example.com/mcp` as a remote MCP server in their client.
+2. The client discovers the OAuth server, registers itself, and opens the consent page.
+3. The user pastes their SXT API key. The server checks it with SXT, then issues tokens sealed over it. The server stores nothing.
+
+Headless agents skip OAuth and send `X-SXT-API-Key: <their key>` on each request.
+
+The server needs no SXT key and no wallet key of its own. Run it with neither set. `SAFETY.md` → "Public mode" lists every rule and variable.
 
 ### HTTP environment variables
 

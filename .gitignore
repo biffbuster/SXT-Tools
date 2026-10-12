@@ -49,6 +49,7 @@ yarn-error.log*
 # dataset. Contains the publisher's wallet hex — never commit.
 .last-publish.json
 examples/data/.last-publish.json
+examples/scripts/.upstream-check.json
 examples/data/proof-plans/*/
 
 # untrack the dataset-specific CSV + schema seeded during the latest

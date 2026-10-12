@@ -4,7 +4,7 @@ This document lets a reviewer test **every feature end-to-end via the CLI**, exa
 
 ## What we're asking from SXT
 
-1. **Blessing for the `sxt` binary name** and "Space and Time" references for a clearly-labeled community CLI (every help screen and doc carries "community-built, not endorsed").
+1. **Blessing for the `sxt` binary name** and "Space and Time" references. Resolved 2026-10-12: the partnership is confirmed, and every help screen and doc now carries the notice "Built in partnership with Space and Time."
 2. **Review of the protocol claims we reverse-engineered** (Tier 4 below) — especially the undocumented 20 SXT creation burn and the SCI metadata format. We'd rather cite your docs than our probes.
 3. Optional: `TablesPalletPermission::EditSchema` for the demo wallet (removes creation burns from rehearsals), and a look at the prover/testnet issues we've isolated for you.
 

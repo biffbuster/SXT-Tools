@@ -19,21 +19,34 @@ export const FOUNDATIONS_RESOURCE_URI = "sxt://docs/proof-of-sql-foundations";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
-// Resolve the SKILL.md relative to the compiled output. From dist/tools/ → repo root → packages/plugins/...
-const FOUNDATIONS_SKILL_PATH = resolve(
-  HERE,
-  "..",
-  "..",
-  "..",
-  "..",
-  "..",
-  "packages",
-  "plugins",
-  "dreamspace-query",
-  "skills",
-  "proof-of-sql-foundations",
-  "SKILL.md",
-);
+/**
+ * Resolution order matters for installed users.
+ *
+ * 1. `<package>/docs/` — written by `scripts/bundle-docs.mjs` at prebuild and
+ *    shipped in the npm tarball. This is the ONLY path that exists when the
+ *    server is installed via npx, so it must be tried first.
+ * 2. The monorepo source, five levels up from `dist/tools/`. Keeps `npm run dev`
+ *    serving live edits to the SKILL.md without a rebuild.
+ * 3. The fallback stub, which points at the canonical URL.
+ */
+const FOUNDATIONS_CANDIDATES = [
+  // dist/tools/ → dist/ → <package>/docs/
+  resolve(HERE, "..", "..", "docs", "proof-of-sql-foundations.md"),
+  resolve(
+    HERE,
+    "..",
+    "..",
+    "..",
+    "..",
+    "..",
+    "packages",
+    "plugins",
+    "dreamspace-query",
+    "skills",
+    "proof-of-sql-foundations",
+    "SKILL.md",
+  ),
+];
 
 const FALLBACK_BODY =
   "# Proof of SQL Foundations\n\n" +
@@ -45,11 +58,14 @@ export async function readFoundationsResource(): Promise<{
   mimeType: "text/markdown";
   text: string;
 }> {
-  let text: string;
-  try {
-    text = await readFile(FOUNDATIONS_SKILL_PATH, "utf8");
-  } catch {
-    text = FALLBACK_BODY;
+  let text = FALLBACK_BODY;
+  for (const candidate of FOUNDATIONS_CANDIDATES) {
+    try {
+      text = await readFile(candidate, "utf8");
+      break;
+    } catch {
+      // Try the next candidate.
+    }
   }
   return {
     uri: FOUNDATIONS_RESOURCE_URI,

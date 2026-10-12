@@ -11,6 +11,9 @@ type SkillSpec = {
   highlights: string[];
   languages: string[];
   cardDescription: string;
+  // the `sxt` CLI command this skill maps to once installed from npm; omitted for
+  // reference-only skills (proof-of-sql-foundations) and skills without a CLI verb.
+  command?: string;
   // "stable" = ready to use today. "coming-soon" = SKILL.md scaffolded
   // (visible on the catalog so the roadmap is honest) but the CLI
   // implementation is in progress; the SKILL.md documents today's
@@ -24,6 +27,7 @@ const SKILL_SPECS: SkillSpec[] = [
     skill: "dataset-publish",
     lifecycle: "Publish",
     stage: 1,
+    command: "sxt publish <csv> [PREFIX.TABLE]",
     languages: ["TypeScript", "JavaScript"],
     cardDescription:
       "Publish a CSV, Parquet, or JSON file to Space and Time as a chain-secured table queryable with Proof of SQL.",
@@ -38,6 +42,7 @@ const SKILL_SPECS: SkillSpec[] = [
     skill: "index-contract",
     lifecycle: "Publish",
     stage: 1,
+    command: "sxt index --address 0x… --event-signature \"…\"",
     languages: ["TypeScript", "Solidity"],
     cardDescription:
       "Register any EVM contract for SXT to index its events into queryable tables under your namespace. CLI registration ships now (index-contract.mjs via the createTableWithSciMetadata extrinsic — the same one the Studio UI submits). SXT's docs still list SCI zk-commitment itself as 'coming soon', so the on-chain proof pipeline against SCI tables isn't end-to-end yet.",
@@ -67,6 +72,7 @@ const SKILL_SPECS: SkillSpec[] = [
     skill: "run-proven-query",
     lifecycle: "Query",
     stage: 2,
+    command: "sxt verify",
     languages: ["TypeScript", "SQL"],
     cardDescription:
       "Run a SELECT against a published SXT table with proveExecution=true and return the proof receipt.",
@@ -81,6 +87,7 @@ const SKILL_SPECS: SkillSpec[] = [
     skill: "chain-data-query",
     lifecycle: "Query",
     stage: 2,
+    command: "sxt chain-plan --table … --predicate \"…\"",
     languages: ["TypeScript", "Solidity", "SQL"],
     cardDescription:
       "Generate a HyperKZG-provable parameterized SQL query against SXT's zk-committed Ethereum index, consumable by a Solidity contract on Base via IQueryRouter.requestQuery.",
@@ -109,6 +116,7 @@ const SKILL_SPECS: SkillSpec[] = [
     skill: "deploy-contract",
     lifecycle: "Deploy",
     stage: 4,
+    command: "sxt deploy",
     languages: ["Solidity", "TypeScript"],
     cardDescription:
       "Deploy a Solidity contract to an EVM chain via forge create, gated behind a mainnet confirmation prompt.",
@@ -177,6 +185,7 @@ function loadSkills(): SkillCard[] {
       lifecycle: spec.lifecycle,
       highlights: spec.highlights,
       languages: spec.languages,
+      command: spec.command,
       githubUrl: `https://github.com/biffbuster/sxt-tools/blob/main/packages/plugins/${spec.plugin}/skills/${spec.skill}/SKILL.md`,
       status: spec.status ?? "stable",
     } satisfies SkillCard;

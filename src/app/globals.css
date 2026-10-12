@@ -1665,6 +1665,32 @@ body::before {
   overflow: hidden;
 }
 
+/* CLI command the skill maps to once installed from npm */
+.skills-card-command {
+  margin-top: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  font-family: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12.5px;
+  color: #6ee787;
+  background: rgba(110, 231, 135, 0.08);
+  border: 1px solid rgba(110, 231, 135, 0.28);
+  border-radius: 8px;
+  padding: 7px 12px;
+}
+.skills-card-command .scc-prompt {
+  color: var(--muted-grey, #6b768c);
+  opacity: 0.8;
+}
+.skills-card-command code {
+  font-family: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Card meta row: model logos + language tiles */
 .skills-card-meta {
   display: flex;

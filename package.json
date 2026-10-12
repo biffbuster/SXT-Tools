@@ -13,6 +13,7 @@
     "demo": "node examples/scripts/preflight.mjs --read-only && node examples/scripts/demo-rehearsal.mjs",
     "demo:full": "node examples/scripts/preflight.mjs && node examples/scripts/demo-rehearsal.mjs",
     "demo:parity": "node examples/scripts/mcp-parity-test.mjs",
+    "check:upstream": "node examples/scripts/check-upstream.mjs",
     "demo:fullpipeline": "node examples/scripts/preflight.mjs && node examples/scripts/demo-fullpipeline.mjs",
     "demo:fullpipeline:rehearse": "node examples/scripts/demo-fullpipeline.mjs --skip-onchain"
   },

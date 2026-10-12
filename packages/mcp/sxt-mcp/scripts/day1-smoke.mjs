@@ -96,6 +96,61 @@ function check(name, pass, detail = "") {
   console.log(`${mark} ${name}${detail ? `  — ${detail}` : ""}`);
 }
 
+/**
+ * Regression guard for the publish data path.
+ *
+ * csv-parse yields strings. Handing them straight to Arrow's typed builders
+ * turns every BOOLEAN into `false` (silent corruption that a HyperKZG proof
+ * would then attest to) and throws on TIMESTAMP. coerceValues() sits between
+ * them. These cases assert the coercion contract AND that the coerced values
+ * survive a real Arrow round-trip.
+ */
+async function caseArrowCoercion() {
+  const { coerceValues, inferColumnTypes } = await import("../dist/tools/publish-dataset.js");
+  const arrow = await import("apache-arrow");
+
+  const roundTrip = (values, arrowType) => [
+    ...arrow.vectorFromArray(values, arrowType).toArray(),
+  ];
+
+  const bools = roundTrip(coerceValues(["true", "FALSE", "1", "0"], "BOOLEAN", "B"), new arrow.Bool());
+  check(
+    "BOOLEAN survives Arrow round-trip (not all-false)",
+    JSON.stringify(bools) === JSON.stringify([true, false, true, false]),
+    `got ${JSON.stringify(bools)}`,
+  );
+
+  const ts = roundTrip(
+    coerceValues(["2026-01-15T10:30:00Z", "1768473000000"], "TIMESTAMP", "T"),
+    new arrow.TimestampMillisecond(),
+  ).map(String);
+  check("TIMESTAMP accepts ISO 8601 and epoch millis", ts[0] === "1768473000000" && ts[1] === "1768473000000", `got ${ts.join(",")}`);
+
+  const ints = roundTrip(coerceValues(["123", "-456"], "BIGINT", "N"), new arrow.Int64()).map(String);
+  check("BIGINT survives Arrow round-trip", ints.join(",") === "123,-456", `got ${ints.join(",")}`);
+
+  const threw = (fn) => {
+    try {
+      fn();
+      return false;
+    } catch {
+      return true;
+    }
+  };
+  check(
+    "unparseable BOOLEAN is rejected, not silently false",
+    threw(() => coerceValues(["true", "yes"], "BOOLEAN", "B")),
+  );
+  check(
+    "non-integer in a BIGINT column is rejected",
+    threw(() => coerceValues(["1", "1.5"], "BIGINT", "N")),
+  );
+  check(
+    "decimal column is refused at inference (before any spend)",
+    threw(() => inferColumnTypes([{ PRICE: "12.50" }])),
+  );
+}
+
 async function caseAnnotationsEmitted() {
   const client = startServer();
   try {
@@ -107,6 +162,7 @@ async function caseAnnotationsEmitted() {
       "sxt.run_proven_query",
       "sxt.audit_contract",
       "sxt.deploy_contract",
+      "sxt.generate_proof_plan",
     ];
     for (const name of required) {
       const t = tools.find((x) => x.name === name);
@@ -122,7 +178,7 @@ async function caseAnnotationsEmitted() {
         return check(`${name} annotation hints complete`, false, JSON.stringify(a));
       }
     }
-    check("tools/list emits all 4 annotation blocks", true);
+    check(`tools/list emits all ${required.length} annotation blocks`, true);
   } finally {
     client.child.kill();
   }
@@ -214,6 +270,7 @@ async function main() {
     await caseSandboxAcceptsInRoot(sandboxDir, fooSol);
     await caseSandboxRejectsOutside(sandboxDir, "/etc/hosts");
     await caseStrictRejectsUnknownKey(sandboxDir);
+    await caseArrowCoercion();
   } finally {
     await rm(sandboxDir, { recursive: true, force: true });
   }

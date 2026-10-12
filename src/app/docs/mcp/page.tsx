@@ -30,11 +30,9 @@ export default function McpPage() {
           .
         </p>
         <p>
-          <strong>Built independently — not endorsed or supported by Space and Time.</strong>{" "}
-          The phased rollout + mainnet double-gate are self-imposed
-          good-faith constraints, not SXT-imposed gates. Engage SXT
-          engineering directly for production use cases until an official
-          approval lands.
+          <strong>Built in partnership with Space and Time.</strong>{" "}
+          The phased rollout and the mainnet double-gate are the
+          project&apos;s safety rules for agent-driven use.
         </p>
       </div>
 
@@ -288,8 +286,8 @@ cd sxt-tools && npm install   # root postinstall builds the MCP server`}</code>
         </thead>
         <tbody>
           <tr>
-            <td>Removal of the &quot;not endorsed&quot; disclaimer</td>
-            <td><code>SAFETY.md</code> today states the server is built independently. Production requires sign-off on the tool surface and security posture.</td>
+            <td>Review of the hosted surface</td>
+            <td>The partnership is confirmed. A production launch still includes an SXT review of the hosted tool surface and security posture.</td>
           </tr>
           <tr>
             <td>Elevated API rate limits or OAuth federation</td>
@@ -301,7 +299,7 @@ cd sxt-tools && npm install   # root postinstall builds the MCP server`}</code>
           </tr>
           <tr>
             <td>Listing in official integration directories</td>
-            <td>claude.ai integrations, ChatGPT connectors, and equivalents list servers under a verified brand. Endorsement is the gate.</td>
+            <td>claude.ai integrations, ChatGPT connectors, and equivalents list servers under a verified brand. Each directory runs its own review before listing.</td>
           </tr>
           <tr>
             <td>Brand alignment</td>

@@ -70,8 +70,8 @@ Every spend is gated behind an explicit confirmation prompt. Run
   end-to-end today.
 - **`--chain base` is rejected by index-contract.mjs** — the SXT chain's
   Source enum has no Base variant yet.
-- **The MCP server is community-built** and not endorsed by Space and Time;
-  it stays `private: true` on npm pending review (`packages/mcp/sxt-mcp/SAFETY.md`).
+- **The MCP server is built in partnership with Space and Time.**
+  It stays `private: true` on npm pending review (`packages/mcp/sxt-mcp/SAFETY.md`).
 
 ## What feedback we want
 
