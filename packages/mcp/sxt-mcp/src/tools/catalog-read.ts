@@ -1,9 +1,9 @@
 /**
  * The read-only tool catalog: the only tools any HTTP surface (Node or
  * Cloudflare Workers) registers. Each spends nothing but the caller's own
- * query credit (run_proven_query) or nothing at all (get_proof_result,
- * generate_proof_plan), needs no private key, and touches no filesystem on
- * the hosted surface.
+ * query credit (run_proven_query) or nothing at all (list_tables,
+ * describe_table, get_proof_result, generate_proof_plan), needs no private
+ * key, and touches no filesystem on the hosted surface.
  *
  * Adding a tool here exposes it to every hosted user. It must keep all three
  * properties above.
@@ -17,8 +17,49 @@ import {
   getProofResultHandler,
 } from "./run-proven-query.js";
 import { generateProofPlanSchema, generateProofPlanHandler } from "./generate-proof-plan.js";
+import {
+  listTablesSchema,
+  listTablesHandler,
+  describeTableSchema,
+  describeTableHandler,
+} from "./catalog.js";
 
 export const READ_ONLY_TOOLS = [
+  {
+    name: "sxt.list_tables",
+    description:
+      "Start here. Lists the public tables that can be proven today (Ethereum blocks and " +
+      "transactions, plus an example user-published table), each with its columns, a " +
+      "description and example SQL, checked live against the prover's catalog. Free: no " +
+      "credentials, no credit. Tables the user published themselves are not listed; use " +
+      "sxt.describe_table for those.",
+    schema: listTablesSchema,
+    handler: listTablesHandler,
+    annotations: {
+      title: "List provable tables",
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
+      idempotentHint: true,
+    },
+  },
+  {
+    name: "sxt.describe_table",
+    description:
+      "Check whether a table can be proven and get its exact column names and types, live from " +
+      "the prover's catalog. Works for public tables and for tables the user published " +
+      "(PREFIX_<WALLET HEX>.TABLE). Call it before writing SQL for sxt.run_proven_query. Free: " +
+      "no credentials, no credit.",
+    schema: describeTableSchema,
+    handler: describeTableHandler,
+    annotations: {
+      title: "Describe a provable table",
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
+      idempotentHint: true,
+    },
+  },
   {
     name: "sxt.run_proven_query",
     description:

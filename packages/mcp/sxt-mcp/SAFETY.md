@@ -38,9 +38,16 @@ Mainnet execution requires **both**:
 
 Either alone returns `MainnetGateError`. The env literal is intentionally not the default `true`/`1` so it has to be typed deliberately. Agents exploring tools cannot accidentally configure mainnet by guessing.
 
-The gate is enforced in `src/lib/network.ts → selectNetwork()`. Every
-chain-touching tool routes through that single function. There is no bypass
-elsewhere in the codebase.
+The gate is enforced in `src/lib/network.ts → selectNetwork()`. Every tool
+that writes to a chain or spends from a wallet routes through that single
+function. There is no bypass elsewhere in the codebase.
+
+One class of tool reads mainnet without the gate: tools that read the
+prover's catalog (`run_proven_query`, `get_proof_result`, `list_tables`,
+`describe_table`). The prover has exactly one catalog, mainnet, so there is
+no network to choose, and these tools write nothing and spend no SXT, ETH or
+gas. `run_proven_query` spends one query credit on the caller's own API key.
+Any new tool that writes or spends must still call `selectNetwork()`.
 
 ---
 

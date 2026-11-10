@@ -269,7 +269,13 @@ describe("hosted tool surface", () => {
     const r = await rpc({ authorization: `Bearer ${tokens.access_token}` }, "tools/list");
     expect(r.status).toBe(200);
     const names = (r.json.result.tools as Array<{ name: string }>).map((t) => t.name).sort();
-    expect(names).toEqual(["sxt.generate_proof_plan", "sxt.get_proof_result", "sxt.run_proven_query"]);
+    expect(names).toEqual([
+      "sxt.describe_table",
+      "sxt.generate_proof_plan",
+      "sxt.get_proof_result",
+      "sxt.list_tables",
+      "sxt.run_proven_query",
+    ]);
   });
 
   it("rejects a forged bearer", async () => {

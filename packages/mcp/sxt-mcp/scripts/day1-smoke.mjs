@@ -163,6 +163,8 @@ async function caseAnnotationsEmitted() {
       "sxt.audit_contract",
       "sxt.deploy_contract",
       "sxt.generate_proof_plan",
+      "sxt.list_tables",
+      "sxt.describe_table",
     ];
     for (const name of required) {
       const t = tools.find((x) => x.name === name);

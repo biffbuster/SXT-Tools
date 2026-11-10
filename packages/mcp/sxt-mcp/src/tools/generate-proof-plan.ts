@@ -22,7 +22,7 @@ import { z } from "zod";
 import { selectNetwork } from "../lib/network.js";
 import { ToolError, UpstreamError } from "../lib/sanitize.js";
 import type { ToolContext } from "../lib/context.js";
-import { logger } from "../lib/logger.js";
+import { rpcFetch } from "../lib/chain-rpc.js";
 
 export const generateProofPlanSchema = z
   .object({
@@ -84,27 +84,6 @@ const UNPROVEN_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
 interface RpcResponse {
   result?: { proofPlan?: string; at?: string };
   error?: { message?: string; code?: number };
-}
-
-/** Retries only transient transport failures, matching save-proof-plans.mjs:228. */
-async function rpcFetch(endpoint: string, body: unknown, tries = 4): Promise<Response> {
-  let lastErr: unknown;
-  for (let attempt = 1; attempt <= tries; attempt++) {
-    try {
-      return await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(20_000),
-      });
-    } catch (err) {
-      lastErr = err;
-      const msg = String(err instanceof Error ? err.message : err);
-      if (!/fetch failed|TIMEOUT|ECONN|ETIMEDOUT|ABORT/i.test(msg)) throw err;
-      logger.debug(`evmProofPlan transport retry ${attempt}/${tries}: ${msg}`);
-    }
-  }
-  throw lastErr;
 }
 
 export async function generateProofPlanHandler(args: GenerateProofPlanArgs, ctx: ToolContext = {}) {

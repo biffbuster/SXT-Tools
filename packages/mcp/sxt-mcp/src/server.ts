@@ -73,7 +73,7 @@ const WRITE_TOOLS = [
   },
 ] as const satisfies readonly ToolDef[];
 
-const ALL_TOOLS = [READ_ONLY_TOOLS[0], WRITE_TOOLS[0], ...READ_ONLY_TOOLS.slice(1), ...WRITE_TOOLS.slice(1)];
+const ALL_TOOLS = [...READ_ONLY_TOOLS, ...WRITE_TOOLS];
 
 export type ToolName = (typeof ALL_TOOLS)[number]["name"];
 

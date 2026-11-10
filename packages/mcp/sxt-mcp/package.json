@@ -2,8 +2,10 @@
   "name": "@biffbuster/sxt-mcp",
   "version": "0.4.0",
   "description": "MCP server exposing the Space and Time publish-and-prove pipeline as typed MCP tools. Publish a CSV to a chain-secured table, run Proof of SQL, audit Solidity, deploy contracts. Mainnet double-gated, testnet defaults.",
-  "private": true,
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",

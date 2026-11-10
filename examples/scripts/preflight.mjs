@@ -7,7 +7,7 @@
  *
  *   - Plugin marketplace structure (marketplace.json + 3 plugin.json files)
  *   - SKILL.md frontmatter parses for all 7 skills
- *   - MCP server compiles + boots + lists 6 tools + 1 resource
+ *   - MCP server compiles + boots + lists 8 tools + 1 resource
  *   - Docs site reachable at localhost:3000 (if dev server running)
  *   - npm pack --dry-run produces a publishable tarball for sxt-mcp
  *
@@ -219,7 +219,7 @@ await check("SXT_API_KEY set", () => {
 if (!QUICK) {
   section("MCP server (boot + list tools)");
 
-  await check("server starts on stdio + lists 6 tools", async () => {
+  await check("server starts on stdio + lists 8 tools", async () => {
     const indexJs = resolve(MCP_DIR, "dist", "index.js");
     const child = spawn("node", [indexJs], { stdio: ["pipe", "pipe", "pipe"] });
 
@@ -260,13 +260,13 @@ if (!QUICK) {
     }
     child.kill();
 
-    if (!stderr.includes("Tools: 6 live")) {
+    if (!stderr.includes("Tools: 8 live")) {
       throw new Error(`startup banner wrong: ${stderr.split("\n").find((l) => l.includes("[sxt-mcp")) ?? "(none)"}`);
     }
     const toolMatches = stdout.match(/"name":"sxt\.[a-z_]+"/g) ?? [];
     const unique = new Set(toolMatches);
-    if (unique.size !== 6) {
-      throw new Error(`expected 6 unique tool names, got ${unique.size}: ${[...unique].join(", ")}`);
+    if (unique.size !== 8) {
+      throw new Error(`expected 8 unique tool names, got ${unique.size}: ${[...unique].join(", ")}`);
     }
     return [...unique].sort().join(", ");
   });

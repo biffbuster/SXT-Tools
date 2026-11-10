@@ -4,7 +4,7 @@
  *
  * Spawns the compiled HTTP MCP server on an ephemeral high port and verifies:
  *
- *   1. tools/list exposes ONLY the read-only allowlist (run_proven_query, generate_proof_plan)
+ *   1. tools/list exposes ONLY the read-only allowlist (list_tables, describe_table, run_proven_query, get_proof_result, generate_proof_plan)
  *   2. The other three tools are NOT listed (no accidental write-surface leak)
  *   3. Calling a hidden tool by name returns "Unknown tool" (no bypass)
  *   4. Bad Host header → 403 (DNS rebinding defense)
@@ -27,7 +27,7 @@ const BEARER = "test-bearer-" + Math.random().toString(36).slice(2);
 const BASE = `http://127.0.0.1:${PORT}/mcp`;
 
 // Must match HTTP_READ_ONLY_TOOLS in src/server.ts (sorted).
-const READ_ONLY = ["sxt.generate_proof_plan", "sxt.get_proof_result", "sxt.run_proven_query"];
+const READ_ONLY = ["sxt.describe_table", "sxt.generate_proof_plan", "sxt.get_proof_result", "sxt.list_tables", "sxt.run_proven_query"];
 
 const results = [];
 function check(name, pass, detail = "") {
