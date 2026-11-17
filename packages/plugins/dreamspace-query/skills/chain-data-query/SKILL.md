@@ -5,9 +5,9 @@ description: Query SXT-indexed Ethereum chain data with a Proof of SQL receipt â
 
 # Chain Data Query
 
-## Under maintenance
+## Status (2026-11-17)
 
-This skill depends on the off-chain Proof of SQL prover and is temporarily unavailable.
+`ETHEREUM.BLOCKS` proves end to end. `ETHEREUM.TRANSACTIONS` does not: its proofs fail at the prover ("Query execution failed 3 times") and have stalled the prover for every user, so `sxt chain-plan` and the MCP server refuse it. Until SXT fixes it, build on `ETHEREUM.BLOCKS` or on a community table (`sxt tables`). Ungrouped aggregates such as `COUNT(*) ... WHERE` also fail off-chain today; project rows instead, and pre-flight the exact SQL with `sxt verify --sql` before any on-chain spend.
 
 ## What this skill does
 
@@ -45,7 +45,7 @@ SXT's [Indexed Ethereum Data (ZK-proven)](https://docs.spaceandtime.io/docs/inde
 
 **Pre-flight before assuming.** Always validate a candidate table via `commitments_v1_evmProofPlan` (free, ~200ms RPC call) before building anything on it. `generate-chain-plan.mjs` does this gate automatically â€” if it returns 254018, stop.
 
-**Refuse and explain** for: any table not in the 6-row validated set above, BASE.* anything (no zk-committed BASE catalog), arbitrary Studio-cataloged tables, SCI-registered user tables (those go through `index-contract`'s "coming soon" path).
+**Refuse and explain** for: any table not in the 6-row validated set above, BASE.* anything (no zk-committed BASE catalog), arbitrary Studio-cataloged tables, SCI-registered user tables (prove those with `run-proven-query`; this skill's templates target the `ETHEREUM.*` schemas).
 
 ## Inputs
 

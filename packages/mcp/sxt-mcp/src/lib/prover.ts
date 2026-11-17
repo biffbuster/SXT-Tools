@@ -161,6 +161,12 @@ export class ProverClient {
     return this.poll(queryId, this.now() + opts.waitMs, opts);
   }
 
+  /** Authenticated GET on a read endpoint (e.g. /v2/discover/*). Spends nothing, so it is retried. */
+  async getJson(path: string, signal?: AbortSignal): Promise<unknown> {
+    const token = await this.accessToken();
+    return this.withRetry(`GET ${path.split("?")[0]}`, signal, () => this.authed("GET", path, token));
+  }
+
   private async poll(queryId: string, deadline: number, opts: ProveOptions): Promise<ProofOutcome> {
     let polls = 0;
     let status: ProverStatus = "unknown";

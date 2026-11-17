@@ -163,7 +163,12 @@ Each rule below is enforced in code, not just documentation. The two smoke scrip
 | TIMESTAMP / bad value crashes after `createTables` paid | Encode pre-flight runs before any extrinsic     |
 | Second publish leaves table unregistered              | `batchAll` rollback fallback re-sends `createTables` |
 | Decimal column silently degrades to VARCHAR           | Refused at inference with an explicit rewrite path |
-| Agent verifies a publish with `COUNT(*)`              | Aggregates refused; `verifyHint` emits a point lookup |
+| Agent verifies a publish with `COUNT(*)`              | Ungrouped aggregates refused; `verifyHint` emits a point lookup |
+| Agent submits SQL the prover cannot plan              | Free chain-RPC planner preflight refuses it with the reason, before submit |
+| Agent pulls a whole large table into one proof        | Tables of 50 MB or more refuse SQL with no WHERE or LIMIT |
+| Agent queries a table that breaks the shared prover   | `UNSTABLE_TABLES` (today `ETHEREUM.TRANSACTIONS`) refused before submit |
+| Agent retries a query the prover failed to execute    | `QUERY_FAILED` is non-retryable and says retrying fails the same way |
+| Agent misreads DECIMAL limbs as numbers               | `rows` decodes DECIMAL to exact strings; raw `result` kept alongside |
 | Dropped status request fails a paid proof             | `prover.ts` retries free calls; submit is never retried |
 | Long proof times out and the agent resubmits          | Pending handle + `sxt.get_proof_result` resume without a credit |
 
@@ -279,6 +284,9 @@ Public mode refuses to start without `SXT_MCP_TOKEN_SECRET`, refuses a non-https
 | `SXT_MCP_ALLOW_KEY_HEADER`       | on      | `0` disables `X-SXT-API-Key`. |
 | `SXT_MCP_TRUST_PROXY`            | `1`     | Trusted reverse-proxy hops, for client IPs on the OAuth rate limits. |
 | `SXT_MCP_MAX_WAIT_SECONDS`       | `120`   | Ceiling on the `waitSeconds` a caller may request. Longer proofs return a pending handle. |
+| `SXT_MCP_LARGE_TABLE_BYTES`      | 50 MB   | Tables at or above this size refuse SQL with neither WHERE nor LIMIT. |
+| `SXT_MCP_ALLOW_AGGREGATES`       | (unset) | `1` lifts the refusal of aggregates without GROUP BY, once the prover runs them again. |
+| `SXT_MCP_ALLOW_UNSTABLE_TABLES`  | (unset) | `1` lets queries reach tables listed as breaking the prover (today `ETHEREUM.TRANSACTIONS`). |
 | `PORT`                           | `3333`  | Honoured when `SXT_MCP_HTTP_PORT` is unset, for container platforms. |
 
 ---

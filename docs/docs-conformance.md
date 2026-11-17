@@ -25,7 +25,7 @@ live-chain metadata/storage probes (read-only) for anything docs don't cover.
 |---|---|---|---|---|
 | API root | `https://api.makeinfinite.dev` | SDK + working `verify-table.mjs` | ✅ empirical | none |
 | Auth: apikey → 25-min JWT at `proxy.api.makeinfinite.dev/auth/apikey` | run-proven-query SKILL.md | empirical (docs don't cover the proxy) | ✅ empirical | none |
-| `sourceNetwork: "MAINNET"` literal | CLAUDE.md | empirical (400 on all others) | ✅ empirical | none |
+| `sourceNetwork` `MAINNET` (case-insensitive) | CLAUDE.md | MakeInfinite OpenAPI enum `MAINNET`/`TESTNET`; live 2026-11-16: `mainnet`/`MAINNET`/`Mainnet` accepted, unknown values 400 | ✅ | none |
 | `commitmentScheme: "HYPER_KZG"` | CLAUDE.md | live chain: `CommitmentScheme` enum = `HyperKzg \| DynamicDory` | ✅ | none |
 
 ## Publish flow vs canonical tutorial
@@ -46,7 +46,7 @@ Diffed `publish-dataset-cli.mjs` against
 
 | Claim | SXT docs say | Reality (verified) | Action taken |
 |---|---|---|---|
-| SCI tables "ZK proven sub-second" | [SCI docs](https://docs.spaceandtime.io/docs/smart-contract-indexing) claim it | ❌ Empirically false today — prover returns `254018 incomplete commitment coverage` for SCI tables; only `ETHEREUM.BLOCKS`/`TRANSACTIONS` round-trip | **Empirical evidence wins.** Repo keeps the honest "not yet zk-proven" framing everywhere |
+| SCI tables "ZK proven sub-second" | [SCI docs](https://docs.spaceandtime.io/docs/smart-contract-indexing) claim it | ✅ True since 2026-06-30 (PUNK_BOUGHT proof verified, 57 rows); prover plans SCI queries as of 2026-11-16. SXT's ZK-proven tables page still says "coming soon" | Repo framing updated 2026-11-16: provable, live-only indexing |
 | Registration is "Studio UI only" | Docs describe only the UI flow | ✅ UI-first, BUT the chain exposes user-callable `tables.createTableWithSciMetadata` (read from live metadata) — the same extrinsic the UI submits (user SCI tables exist only in `tableMetadata` storage, not the permissioned `Smartcontracts` pallet) | Implemented `index-contract.mjs` on the public extrinsic (v0.2.0-beta.1) |
 | Supported chains "Ethereum + Base" | Marketing mentions Base indexing | ❌ Live chain `Source` enum = `Ethereum \| Sepolia \| Bitcoin \| Polygon \| ZkSyncEra \| UserCreated` — **no Base** | SKILL.md corrected; `--chain base` rejected with explanation |
 | Historical backfill | Docs ambiguous | Studio UI labels it "coming soon"; live-only today | HOW_IT_WORKS.md backfill claims removed |

@@ -45,8 +45,9 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 //      the proof plans baked into StakersQuery.sol)
 let handoff = readLastPublish();
 // An indexed-sci handoff (written by index-contract.mjs) is not consumable by
-// the CSV proof pipeline — SCI tables aren't zk-provable yet. Ignore it so
-// env vars / legacy defaults win instead of resolving to an unprovable table.
+// the CSV proof pipeline: it has no inferred-schema file and its address
+// columns are BINARY, which formatLiteral has not been proven against. Ignore
+// it so env vars / legacy defaults win.
 if (handoff?.kind === 'indexed-sci') handoff = null;
 
 const RPC = process.env.SXT_RPC_HTTP ?? 'https://rpc.mainnet.sxt.network';

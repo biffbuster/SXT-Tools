@@ -24,6 +24,7 @@ export type ErrorCode =
   | "SXT_KEY_INVALID"
   | "SXT_SUBSCRIPTION_REQUIRED"
   | "TABLE_NOT_PROVABLE"
+  | "QUERY_FAILED"
   | "RATE_LIMITED"
   | "UPSTREAM_TIMEOUT"
   | "UPSTREAM_ERROR"
@@ -57,12 +58,13 @@ export class UpstreamError extends Error {
 
 const CANNED: Record<ErrorCode, string> = {
   INVALID_ARGUMENTS: "The tool arguments did not match the schema.",
-  SQL_REJECTED: "The SQL was rejected before submission.",
+  SQL_REJECTED: "The SQL was rejected: it uses syntax, a column or a filter the prover cannot prove. Call sxt.describe_table for the columns and supported filters.",
   MAINNET_GATE: "Mainnet execution is not enabled for this call.",
   MISSING_CREDENTIAL: "No SXT API key is attached to this connection. Reconnect and sign in with your SXT API key.",
   SXT_KEY_INVALID: "SXT rejected the API key for this connection. Reconnect with a current key from app.spaceandtime.ai.",
   SXT_SUBSCRIPTION_REQUIRED: "The SXT account behind this API key has no active subscription. Activate one at app.spaceandtime.ai, then retry.",
   TABLE_NOT_PROVABLE: "The table is not in the prover's MAINNET catalog. Check the table reference, or confirm it was published without a PRIMARY KEY clause.",
+  QUERY_FAILED: "The prover accepted the query but could not execute it. Retrying the same SQL fails the same way. Narrow it with a WHERE filter or LIMIT, or rewrite it.",
   RATE_LIMITED: "Too many requests for this connection. Wait a moment and retry.",
   UPSTREAM_TIMEOUT: "The SXT prover did not finish in time. Retry, or narrow the query.",
   UPSTREAM_ERROR: "The SXT prover returned an error for this query.",
@@ -87,7 +89,11 @@ export interface SanitizedError {
 function classifyUpstream(text: string): ErrorCode {
   if (/no api key found|invalid jwt|\b401\b|unauthori[sz]ed|auth exchange failed: 4\d\d/i.test(text)) return "SXT_KEY_INVALID";
   if (/subscription required|insufficient privileges|\b403\b|forbidden/i.test(text)) return "SXT_SUBSCRIPTION_REQUIRED";
+  // The planner's 422 ("Unable to generate proof plan") is about the SQL; the
+  // "does not exist" 422 is about the table.
+  if (/unable to generate proof plan|generate plan failed/i.test(text)) return "SQL_REJECTED";
   if (/does not exist in source network|\b422\b/i.test(text)) return "TABLE_NOT_PROVABLE";
+  if (/query execution failed/i.test(text)) return "QUERY_FAILED";
   if (/\b429\b|too many requests|rate limit/i.test(text)) return "RATE_LIMITED";
   if (/timed? ?out|timeout|ETIMEDOUT|deadline/i.test(text)) return "UPSTREAM_TIMEOUT";
   return "UPSTREAM_ERROR";

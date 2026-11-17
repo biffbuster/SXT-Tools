@@ -19,8 +19,8 @@ Each handler mirrors the canonical script under `examples/scripts/` line-for-lin
 
 | Tool | Cost surface | Mirror script |
 |---|---|---|
-| `sxt.list_tables` | None (chain RPC read) | `examples/scripts/generate-chain-plan.mjs` (its table registry, checked live) |
-| `sxt.describe_table` | None (chain RPC read) | none (decodes the column list from a `SELECT *` proof plan) |
+| `sxt.list_tables` | None (discovery API read with the caller's key; curated list without one) | `examples/scripts/tables.mjs` (`sxt tables`) |
+| `sxt.describe_table` | None (chain RPC read, plus discovery for size and owner) | `sxt tables --describe` (decodes the column list from a `SELECT *` proof plan) |
 | `sxt.publish_dataset` | SXT chain credits per row | `examples/scripts/publish-dataset-cli.mjs` |
 | `sxt.run_proven_query` | One `/v1/zkquery` API tick | `examples/scripts/verify-table.mjs` (request sequence of the SDK's `queryAndVerify`, with an owned poll loop; see SAFETY.md) |
 | `sxt.get_proof_result` | None (resumes a pending proof) | none |

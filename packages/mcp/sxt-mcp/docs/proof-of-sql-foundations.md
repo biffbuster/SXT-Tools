@@ -25,7 +25,7 @@ When the user wants a verifiable result, every clause and operator must come fro
 - **Comparison**: `=`, `!=`, `>=`, `<=`, `>`, `<` (decimal inequality only up to 38 digits)
 - **Logical**: `AND`, `OR`, `NOT`
 - **Arithmetic**: `+`, `-`, `*`
-- **Aggregates**: `SUM`, `COUNT` — ⚠ empirically failing at the prover as of 2026-06-10 (`failed to deserialize prover response json: … expected struct AttestedCommitments` via `/v1/zkquery`, all working SDK versions). They are *in* the documented surface (SXT's own docs describe the prover as evaluating filters, joins, group-bys and aggregations) but don't execute today; prefer point lookups/scans. **Re-probe with `sxt upstream` before promising or continuing to refuse aggregates** — it reports whether the failure still reproduces and names every file to update if it has been fixed.
+- **Aggregates**: `SUM`, `COUNT` prove with `GROUP BY` on one non-VARCHAR column (`SELECT AREA, COUNT(*) AS N FROM t GROUP BY AREA` verified 2026-11-17). A whole-table aggregate with no `GROUP BY` plans but fails at the prover's execution step ("Query execution failed 3 times"), and `GROUP BY` on a VARCHAR column does not compile ("LogicalPlan is not supported"). The MCP server refuses the ungrouped form before submission. **Re-probe with `sxt upstream` before promising or continuing to refuse whole-table aggregates**: it reports whether the failure still reproduces and names every file to update if it has been fixed.
 - **Column types**: `Boolean`, `Uint8`, `TinyInt`, `SmallInt`, `Int`, `BigInt`, `Int128`, `Decimal75`, `Varchar`, `Varbinary`, `Timestamp`
 
 The identifier `count` is reserved and cannot be used as a column alias.

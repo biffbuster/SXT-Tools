@@ -19,8 +19,7 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import type { ZodTypeAny } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
+import { z, type ZodTypeAny } from "zod";
 
 import { logger, type LogFields } from "./lib/logger.js";
 import type { ToolContext } from "./lib/context.js";
@@ -93,7 +92,7 @@ export function buildMcpServer(tools: readonly ToolDef[], options: BuildServerOp
     tools: tools.map((t) => ({
       name: t.name,
       description: t.description,
-      inputSchema: zodToJsonSchema(t.schema),
+      inputSchema: z.toJSONSchema(t.schema, { target: "draft-7", io: "input" }) as Record<string, unknown> & { type: "object" },
       annotations: t.annotations,
     })),
   }));

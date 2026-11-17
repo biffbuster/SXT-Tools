@@ -92,7 +92,7 @@ export default function McpPage() {
       <h2 id="ask">What you can ask</h2>
       <ul>
         <li>&quot;Which tables can I prove queries against?&quot;</li>
-        <li>&quot;List the transactions in Ethereum block 20,000,000 with their gas, with a proof.&quot;</li>
+        <li>&quot;Find a public iris dataset and prove the first five rows.&quot;</li>
         <li>&quot;How large was block 20,000,000 and how many transactions did it hold? Prove it.&quot;</li>
         <li>&quot;Is this wallet in the allowlist table I published?&quot;</li>
         <li>&quot;Compile this query into a plan my Base contract can submit.&quot;</li>
@@ -115,7 +115,10 @@ export default function McpPage() {
         <tbody>
           <tr>
             <td><code>sxt.list_tables</code></td>
-            <td>Public tables that prove today, with columns and example SQL, checked live.</td>
+            <td>
+              Every public table on SXT mainnet: Ethereum blocks plus the tables other users have
+              published, with size and date. Search, filter by namespace, page through.
+            </td>
             <td>Free</td>
             <td>Hosted, local</td>
           </tr>
@@ -127,7 +130,11 @@ export default function McpPage() {
           </tr>
           <tr>
             <td><code>sxt.run_proven_query</code></td>
-            <td>Runs a SELECT with a proof, verifies the proof, returns the rows. Long proofs return a query id.</td>
+            <td>
+              Runs a SELECT on any public table with a proof, verifies the proof, returns readable
+              rows. SQL the prover cannot prove is refused first, for free. Long proofs return a
+              query id.
+            </td>
             <td>One query credit</td>
             <td>Hosted, local</td>
           </tr>
@@ -259,11 +266,18 @@ cd sxt-tools && npm install   # builds the MCP server`}</code>
           </tr>
           <tr>
             <td><code>SQL_REJECTED</code></td>
-            <td>The SQL uses something the prover cannot prove.</td>
+            <td>The SQL uses something the prover cannot prove. Nothing was spent.</td>
             <td>
-              See the <Link href="/docs/space-and-time">proven SQL surface</Link>. Aggregates
-              (COUNT, SUM), window functions, DML and DDL are refused today.
+              The message says what to change. See the{" "}
+              <Link href="/docs/space-and-time">proven SQL surface</Link>. Aggregates need GROUP BY
+              on one non-text column; DECIMAL and TIMESTAMP columns cannot be filtered; large
+              tables need a WHERE or LIMIT.
             </td>
+          </tr>
+          <tr>
+            <td><code>QUERY_FAILED</code></td>
+            <td>The prover accepted the query but could not run it.</td>
+            <td>Retrying the same SQL fails the same way. Narrow it or rewrite it.</td>
           </tr>
           <tr>
             <td><code>RATE_LIMITED</code></td>

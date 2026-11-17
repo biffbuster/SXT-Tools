@@ -45,7 +45,7 @@ const SKILL_SPECS: SkillSpec[] = [
     command: "sxt index --address 0x… --event-signature \"…\"",
     languages: ["TypeScript", "Solidity"],
     cardDescription:
-      "Register any EVM contract for SXT to index its events into queryable tables under your namespace. CLI registration ships now (index-contract.mjs via the createTableWithSciMetadata extrinsic — the same one the Studio UI submits). SXT's docs still list SCI zk-commitment itself as 'coming soon', so the on-chain proof pipeline against SCI tables isn't end-to-end yet.",
+      "Register any EVM contract for SXT to index its events into queryable tables under your namespace. CLI registration ships now (index-contract.mjs via the createTableWithSciMetadata extrinsic — the same one the Studio UI submits). The resulting tables are provable. Indexing runs from the registration block forward, with no historical backfill.",
     highlights: [
       "Keyless --event-signature mode, or verified-ABI fetch via Etherscan v2",
       "createTableWithSciMetadata extrinsic + per-table indexer funding (~100 SXT/event)",

@@ -7,6 +7,8 @@
  * The loop itself lives in lib/prover.ts so free steps can be retried and a
  * long proof can be resumed without resubmitting:
  *   1. POST /auth/apikey → 25-min JWT (cached per key for 20 min)
+ *   0. commitments_v1_evmProofPlan on the chain RPC (free): unsupported SQL is
+ *      refused here with the planner's reason, before any credit is at stake
  *   2. attestation_v1_bestRecentAttestations → recent block hash
  *   3. POST /v1/zkquery → queryId              (spends one credit; never retried)
  *   4. Poll GET /v1/zkquery/{id}/status until done|failed|canceled
@@ -24,16 +26,25 @@
  */
 
 import { z } from "zod";
-import { loadConfig } from "../lib/config.js";
-import { MissingCredentialError } from "../lib/errors.js";
-import { ToolError } from "../lib/sanitize.js";
-import { ProverClient, type ProofOutcome, type ProverDeps } from "../lib/prover.js";
+import { ToolError, UpstreamError } from "../lib/sanitize.js";
+import type { ProofOutcome } from "../lib/prover.js";
 import type { ToolContext } from "../lib/context.js";
+import { rpcFetch } from "../lib/chain-rpc.js";
+import { findTable } from "../lib/discovery.js";
+import { logger } from "../lib/logger.js";
+import { toRows } from "../lib/results.js";
+import { AUTH_URL, PROVER_URL, RPC_HTTP, proverClient, requireApiKey } from "../lib/prover-session.js";
+import { AGGREGATE_NOTE, NOT_COMMITTED, UNSTABLE_TABLES } from "./catalog.js";
 
-// Endpoints match verify-table.mjs and the SXT canonical examples.
-const PROVER_URL = process.env.SXT_PROVER ?? "https://api.makeinfinite.dev";
-const AUTH_URL = process.env.SXT_AUTH ?? "https://proxy.api.makeinfinite.dev/auth/apikey";
-const RPC_HTTP = process.env.SXT_RPC_HTTP ?? "https://rpc.mainnet.sxt.network/";
+export { setProverDepsForTest } from "../lib/prover-session.js";
+
+/**
+ * Tables at or above this size refuse SQL with neither WHERE nor LIMIT: the
+ * result would be the whole table, which the prover must ship and this server
+ * must verify and return. The 2026-11-16 ETHEREUM.TRANSACTIONS failure showed
+ * one heavy proof can stall the shared prover for everyone.
+ */
+const LARGE_TABLE_BYTES = Number(process.env.SXT_MCP_LARGE_TABLE_BYTES ?? 50 * 1024 * 1024);
 
 /** Ceiling on waitSeconds. Longer proofs come back pending and resume. */
 const MAX_WAIT_SECONDS = Number(process.env.SXT_MCP_MAX_WAIT_SECONDS ?? 120);
@@ -103,18 +114,19 @@ const UNPROVEN_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   },
 ];
 
-// Aggregates are in the proven SQL surface on paper, but the live prover
-// currently returns null AttestedCommitments for them (see README "Prover
-// status" and the note in mcp-parity-test.mjs). Submitting one burns an API
-// quota tick and returns an opaque failure, so refuse by default. If SXT
-// restores aggregate support, set SXT_MCP_ALLOW_AGGREGATES=1 to bypass this
-// without waiting on a release.
-//
-// This refusal is a workaround for a live defect, not a permanent surface
-// limit, so it must be re-probed rather than assumed. `sxt upstream`
+// Aggregates, as probed on 2026-11-17:
+//   - GROUP BY on one BIGINT column with COUNT(*) proves and verifies
+//     (HELLO_WORLD, queryId d42eae0d-6880-4a9b-a53f-5316523448fa).
+//   - A whole-table COUNT(*) with no GROUP BY plans, then fails at execution
+//     ("Query execution failed 3 times", IRIS, queryId 28d8d6d1-...).
+//   - GROUP BY on a VARCHAR column does not compile (the planner preflight
+//     reports that one).
+// So only ungrouped aggregates are refused here. SXT_MCP_ALLOW_AGGREGATES=1
+// lifts the refusal without a release. `sxt upstream`
 // (examples/scripts/check-upstream.mjs) runs a live COUNT(*) and reports
-// DRIFT with removal instructions the moment aggregates work again.
+// DRIFT the moment whole-table aggregates work again.
 const AGGREGATE_PATTERN = /\b(count|sum|avg|min|max)\s*\(/i;
+const GROUP_BY_PATTERN = /\bgroup\s+by\b/i;
 
 function validateProvenSurface(sql: string): void {
   for (const r of UNPROVEN_PATTERNS) {
@@ -127,17 +139,99 @@ function validateProvenSurface(sql: string): void {
     }
   }
 
-  if (AGGREGATE_PATTERN.test(sql) && process.env.SXT_MCP_ALLOW_AGGREGATES !== "1") {
+  if (
+    AGGREGATE_PATTERN.test(sql) &&
+    !GROUP_BY_PATTERN.test(sql) &&
+    process.env.SXT_MCP_ALLOW_AGGREGATES !== "1"
+  ) {
     throw new ToolError(
       "SQL_REJECTED",
-      "SQL rejected before submission: aggregate functions (COUNT/SUM/AVG/MIN/MAX) currently " +
-        "fail at the SXT prover with null AttestedCommitments, so submitting this would spend " +
-        "an API quota tick and return an opaque error. Rewrite as a point lookup or filtered " +
-        "projection, e.g. SELECT <col> FROM <table> WHERE <col> = '<value>'. " +
-        "If the prover has since restored aggregate support, set SXT_MCP_ALLOW_AGGREGATES=1 to bypass.",
+      "SQL rejected before submission: an aggregate with no GROUP BY fails at the SXT prover today. " +
+        AGGREGATE_NOTE +
+        " If the prover has since fixed this, set SXT_MCP_ALLOW_AGGREGATES=1 to bypass.",
     );
   }
 }
+
+function validateStableTable(tableRef: string): void {
+  const warning = UNSTABLE_TABLES[tableRef];
+  if (warning && process.env.SXT_MCP_ALLOW_UNSTABLE_TABLES !== "1") {
+    throw new ToolError("SQL_REJECTED", `SQL rejected before submission: ${warning}`);
+  }
+}
+
+/** Planner messages, translated into what an agent should change. */
+function plannerHint(message: string): string {
+  if (/LogicalPlan is not supported/i.test(message)) {
+    return "The query shape is not provable. " + AGGREGATE_NOTE;
+  }
+  if (/column/i.test(message)) {
+    return (
+      "A column name is wrong or a column type cannot be used there. Call sxt.describe_table for the " +
+      "exact names; DECIMAL and TIMESTAMP columns cannot be compared in WHERE."
+    );
+  }
+  return "Call sxt.describe_table for the columns and supported filters.";
+}
+
+/**
+ * Compiles the SQL on the chain RPC before anything is submitted. Free, and
+ * the same planner the prover uses: every query it refused on 2026-11-17 the
+ * prover's own build-plan refused too.
+ */
+async function preflightPlan(sql: string): Promise<void> {
+  const res = await rpcFetch(RPC_HTTP, {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "commitments_v1_evmProofPlan",
+    params: { query: sql },
+  });
+  let json: { result?: { proofPlan?: string }; error?: { code?: number; message?: string } };
+  try {
+    json = (await res.json()) as typeof json;
+  } catch {
+    throw new UpstreamError("Chain RPC", `${RPC_HTTP} returned a non-JSON response (HTTP ${res.status}).`);
+  }
+  if (!json.error) return;
+  const message = String(json.error.message ?? "unknown error").slice(0, 300);
+  if (json.error.code === NOT_COMMITTED) {
+    throw new ToolError(
+      "TABLE_NOT_PROVABLE",
+      "The table is not provable: it does not exist in the prover's catalog or has no proof commitments. " +
+        "Check the PREFIX.TABLE spelling, or call sxt.list_tables.",
+    );
+  }
+  throw new ToolError(
+    "SQL_REJECTED",
+    `SQL rejected by the proof planner (nothing was spent): ${message}. ${plannerHint(message)}`,
+  );
+}
+
+const BOUNDED_PATTERN = /\b(where|limit)\b/i;
+
+/** Refuses an unbounded query on a large table. Skipped when the size is unknown. */
+async function validateBounded(sql: string, tableRef: string, apiKey: string, signal?: AbortSignal): Promise<void> {
+  if (BOUNDED_PATTERN.test(sql) || GROUP_BY_PATTERN.test(sql)) return;
+  let sizeBytes: number | null = null;
+  let size: string | null = null;
+  try {
+    const client = proverClient(apiKey);
+    const t = await findTable((p) => client.getJson(p, signal), tableRef);
+    sizeBytes = t?.sizeBytes ?? null;
+    size = t?.size ?? null;
+  } catch (err) {
+    logger.debug(`size lookup for ${tableRef} failed: ${(err as Error).message}`);
+    return;
+  }
+  if (sizeBytes !== null && sizeBytes >= LARGE_TABLE_BYTES) {
+    throw new ToolError(
+      "SQL_REJECTED",
+      `SQL rejected before submission: ${tableRef} is ${size}, and this query has no WHERE or LIMIT, so it ` +
+        "would return the whole table. Add a WHERE filter or a LIMIT.",
+    );
+  }
+}
+
 
 function validateTableReferenced(sql: string, tableRef: string): void {
   if (!new RegExp(`\\b${tableRef.replace(/\./g, "\\.")}\\b`, "i").test(sql)) {
@@ -147,33 +241,6 @@ function validateTableReferenced(sql: string, tableRef: string): void {
         "Either include the table reference in the FROM clause or correct the tableRef arg.",
     );
   }
-}
-
-/** Test hook: inject fetch / verify / clock into the prover client. */
-let proverDeps: ProverDeps = {};
-export function setProverDepsForTest(deps: ProverDeps): void {
-  proverDeps = deps;
-}
-
-function resolveApiKey(ctx: ToolContext): string {
-  // Hosted callers always bring their own key (ctx.apiKey). Only the local
-  // stdio surface falls back to the operator's env key.
-  const apiKey = ctx.credentialSource === "request" ? ctx.apiKey : (ctx.apiKey ?? loadConfig().apiKey);
-  if (apiKey) return apiKey;
-  if (ctx.credentialSource === "request") {
-    throw new ToolError(
-      "MISSING_CREDENTIAL",
-      "No SXT API key is attached to this connection. Reconnect and sign in with your SXT API key.",
-    );
-  }
-  throw new MissingCredentialError(
-    "SXT_API_KEY",
-    "exchange for a JWT and submit /v1/zkquery requests to the SXT prover",
-  );
-}
-
-function client(apiKey: string): ProverClient {
-  return new ProverClient({ prover: PROVER_URL, auth: AUTH_URL, rpc: RPC_HTTP }, apiKey, proverDeps);
 }
 
 function progressSink(ctx: ToolContext) {
@@ -195,28 +262,34 @@ function render(outcome: ProofOutcome, started: number, extra: Record<string, un
       next: `The proof is still running. Call sxt.get_proof_result with queryId "${outcome.queryId}". Resuming spends no credit.`,
     };
   }
+  const decoded = toRows(outcome.result);
   return {
     ...extra,
     status: "verified",
     verified: true,
     queryId: outcome.queryId,
     elapsedMs,
+    ...(decoded ? { rowCount: decoded.rowCount, rows: decoded.rows } : {}),
     result: outcome.result,
     endpoints: { prover: PROVER_URL, auth: AUTH_URL, substrateRpc: RPC_HTTP },
     notes: [
       "Proof verified locally via WASM verify_prover_response_hyper_kzg.",
+      "rows is result decoded for reading (DECIMAL as exact strings, VARBINARY as 0x hex); result is the raw verifier output.",
       "The same proof is verifiable on-chain in ~150K gas via the QueryRouter contract.",
     ],
   };
 }
 
 export async function runProvenQueryHandler(args: RunProvenQueryArgs, ctx: ToolContext = {}) {
-  const apiKey = resolveApiKey(ctx);
+  const apiKey = requireApiKey(ctx);
   validateProvenSurface(args.sql);
   validateTableReferenced(args.sql, args.tableRef);
+  validateStableTable(args.tableRef);
+  await preflightPlan(args.sql);
+  await validateBounded(args.sql, args.tableRef, apiKey, ctx.signal);
 
   const started = Date.now();
-  const outcome = await client(apiKey).prove(args.sql, {
+  const outcome = await proverClient(apiKey).prove(args.sql, {
     waitMs: args.waitSeconds * 1000,
     onProgress: progressSink(ctx),
     signal: ctx.signal,
@@ -225,9 +298,9 @@ export async function runProvenQueryHandler(args: RunProvenQueryArgs, ctx: ToolC
 }
 
 export async function getProofResultHandler(args: GetProofResultArgs, ctx: ToolContext = {}) {
-  const apiKey = resolveApiKey(ctx);
+  const apiKey = requireApiKey(ctx);
   const started = Date.now();
-  const outcome = await client(apiKey).resume(args.queryId, {
+  const outcome = await proverClient(apiKey).resume(args.queryId, {
     waitMs: args.waitSeconds * 1000,
     onProgress: progressSink(ctx),
     signal: ctx.signal,

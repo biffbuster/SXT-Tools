@@ -62,9 +62,9 @@ Every spend is gated behind an explicit confirmation prompt. Run
 
 ## Known limitations (please don't file these)
 
-- **SCI tables are not zk-provable yet** — `index-contract.mjs` registers
-  ingestion; Proof-of-SQL against the resulting tables 422s until SXT
-  promotes SCI to the proven surface ("coming soon" per SXT docs).
+- **SCI tables index live only** — `index-contract.mjs` tables are
+  provable, but they hold events from the registration block forward, with
+  no historical backfill.
 - **The empirically proven Ethereum surface is narrow** — only
   `ETHEREUM.BLOCKS` and `ETHEREUM.TRANSACTIONS` round-trip the prover
   end-to-end today.

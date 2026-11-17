@@ -28,11 +28,11 @@ export const READ_ONLY_TOOLS = [
   {
     name: "sxt.list_tables",
     description:
-      "Start here. Lists the public tables that can be proven today (Ethereum blocks and " +
-      "transactions, plus an example user-published table), each with its columns, a " +
-      "description and example SQL, checked live against the prover's catalog. Free: no " +
-      "credentials, no credit. Tables the user published themselves are not listed; use " +
-      "sxt.describe_table for those.",
+      "Start here. Lists public tables on the SXT MAINNET catalog: curated Ethereum tables plus " +
+      "every community table SXT users have published, with size and creation date. Paged: " +
+      "pass search to filter by name, schema to list one namespace, and nextCursor for the next " +
+      "page. Free: no query credit. Then call sxt.describe_table on a table to confirm it is " +
+      "provable and get its columns.",
     schema: listTablesSchema,
     handler: listTablesHandler,
     annotations: {
@@ -47,9 +47,9 @@ export const READ_ONLY_TOOLS = [
     name: "sxt.describe_table",
     description:
       "Check whether a table can be proven and get its exact column names and types, live from " +
-      "the prover's catalog. Works for public tables and for tables the user published " +
-      "(PREFIX_<WALLET HEX>.TABLE). Call it before writing SQL for sxt.run_proven_query. Free: " +
-      "no credentials, no credit.",
+      "the prover's catalog, plus its size and owner when known. Works for any public table, " +
+      "including tables other users published (PREFIX_<WALLET HEX>.TABLE). Call it before " +
+      "writing SQL for sxt.run_proven_query. Free: no query credit.",
     schema: describeTableSchema,
     handler: describeTableHandler,
     annotations: {
@@ -63,9 +63,11 @@ export const READ_ONLY_TOOLS = [
   {
     name: "sxt.run_proven_query",
     description:
-      "Run a SELECT against a published SXT table with proveExecution=true and return " +
-      "the proof receipt. Off-chain via /v1/zkquery — no SXT or ETH spend, one query credit on " +
-      "the caller's SXT account. Streams progress while the prover works. A proof still running " +
+      "Run a SELECT against any public SXT table with proveExecution=true and return " +
+      "the proof receipt plus decoded rows. Off-chain via /v1/zkquery — no SXT or ETH spend, one " +
+      "query credit on the caller's SXT account. The SQL is compiled by the free planner first, so " +
+      "unsupported SQL is refused with a reason before anything is spent. Streams progress while " +
+      "the prover works. A proof still running " +
       "after waitSeconds returns status \"pending\" with a queryId for sxt.get_proof_result, which " +
       "resumes without a new credit. Uses the connection's SXT API key (hosted) or SXT_API_KEY (local).",
     schema: runProvenQuerySchema,

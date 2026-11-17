@@ -25,9 +25,10 @@ const COMMANDS = {
   demo: ['demo-rehearsal.mjs', [], 'Read-only demo: live Proof of SQL + contract liveness', 'free (API quota)'],
   publish: ['publish-dataset-cli.mjs', [], 'Publish a CSV as a chain-secured table:  sxt publish <csv> [PREFIX.TABLE]', '20 SXT/object (40 for first publish); ~0.001 to insert into existing table'],
   index: ['index-contract.mjs', [], 'Register a contract for SCI event indexing:  sxt index --address 0x… --chain ethereum --event-signature "event …"', '20 SXT burn/table'],
-  verify: ['verify-table.mjs', [], 'Off-chain Proof of SQL against the active table (zero-cost gate before on-chain spend)', 'free (API quota)'],
+  tables: ['tables.mjs', [], 'List public tables, yours and other users:  sxt tables [search] [--schema S] [--describe PREFIX.TABLE]', 'free'],
+  verify: ['verify-table.mjs', [], 'Off-chain Proof of SQL (zero-cost gate before on-chain spend). Active table, or any:  sxt verify --table PREFIX.TABLE | --sql "SELECT ..."', 'free (API quota)'],
   plan: ['save-proof-plans.mjs', [], 'Generate EVM proof plans for the active table', 'free'],
-  'chain-plan': ['generate-chain-plan.mjs', [], 'Parameterized proof plan against SXT-indexed chain tables:  sxt chain-plan --table ETHEREUM.TRANSACTIONS --predicate "FROM_ADDRESS = $1 AND TO_ADDRESS = $2" --param-types VARCHAR,VARCHAR', 'free'],
+  'chain-plan': ['generate-chain-plan.mjs', [], 'Parameterized proof plan against any provable table:  sxt chain-plan --table ETHEREUM.BLOCKS --predicate "BLOCK_NUMBER = $1" --param-types BIGINT --projection "BLOCK_NUMBER, TRANSACTION_COUNT"', 'free'],
   render: ['render-onchain-query.mjs', [], 'Render the typed Solidity consumer from the proof plan', 'free'],
   deploy: ['deploy-onchain-query.mjs', [], 'Deploy the rendered contract (idempotent via .deploy-state.json)', '~0.001 ETH gas'],
   query: ['query-onchain.mjs', [], 'On-chain query() with proof callback on Base', '100 SXT + gas'],
@@ -52,6 +53,7 @@ Commands:`);
   }
   console.log(`
 The zero-cost flow:    sxt status → sxt demo → sxt verify
+Any public table:      sxt tables iris → sxt tables --describe <REF> → sxt verify --table <REF>
 The publish flow:      sxt publish data.csv MY_PROJECT.TABLE → sxt verify → sxt plan → sxt render → sxt deploy → sxt query
 Every paid command is gated behind its own confirmation prompt.
 

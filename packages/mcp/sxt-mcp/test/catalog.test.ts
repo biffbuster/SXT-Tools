@@ -110,16 +110,26 @@ describe("sxt.describe_table", () => {
   });
 });
 
-describe("sxt.list_tables", () => {
-  it("filters by search and reports each table's live status", async () => {
+describe("sxt.list_tables without a key", () => {
+  // credentialSource "request" with no key: never falls back to a developer's SXT_API_KEY.
+  const keyless = { credentialSource: "request" as const };
+
+  it("falls back to the curated list, filtered and checked live", async () => {
     stubRpc({
-      "ETHEREUM.TRANSACTIONS": {
-        result: { proofPlan: plan("ETHEREUM.TRANSACTIONS", [["TRANSACTION_HASH", VARCHAR]]) },
+      "ETHEREUM.BLOCKS": {
+        result: { proofPlan: plan("ETHEREUM.BLOCKS", [["BLOCK_NUMBER", BIGINT]]) },
       },
     });
-    const r = await listTablesHandler({ search: "transactions" });
-    expect(r.tables.map((t) => t.table)).toEqual(["ETHEREUM.TRANSACTIONS"]);
+    const r = await listTablesHandler({ search: "blocks", limit: 50 }, keyless);
+    expect(r.source).toBe("curated");
+    expect(r.tables.map((t) => t.table)).toEqual(["ETHEREUM.BLOCKS"]);
     expect(r.tables[0]!.provable).toBe(true);
-    expect(r.tables[0]!.columns).toEqual([{ name: "TRANSACTION_HASH", type: "VARCHAR" }]);
+    expect(r.notes.join(" ")).toContain("SXT_API_KEY");
+  });
+
+  it("never lists ETHEREUM.TRANSACTIONS while proofs against it fail", async () => {
+    stubRpc({});
+    const r = await listTablesHandler({ search: "transactions", limit: 50 }, keyless);
+    expect(r.tables).toEqual([]);
   });
 });

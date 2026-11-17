@@ -257,8 +257,10 @@ await probe("auth: API key exchanges for a JWT", async () => {
  * SXT's own docs describe the prover as evaluating "filters, joins, group-bys,
  * and aggregations", so aggregates are IN the documented surface. They were
  * empirically failing on 2026-06-10 with a null AttestedCommitments
- * deserialization error, and on that evidence both the CLI docs and
- * `sxt.run_proven_query` refuse them.
+ * deserialization error. On 2026-11-17 GROUP BY on a BIGINT column proved,
+ * while a whole-table COUNT(*) still failed ("Query execution failed 3
+ * times"), so `sxt.run_proven_query` now refuses only aggregates with no
+ * GROUP BY. This probe runs exactly that refused shape.
  *
  * That refusal is a workaround for a live defect, not a permanent surface
  * limit, so it has to be re-probed rather than assumed. Three outcomes:
@@ -279,16 +281,17 @@ await probe("aggregate support (re-probe; refusal is a dated workaround)", async
     return {
       state: "drift",
       detail:
-        "COUNT(*) SUCCEEDED — aggregates work again. Remove AGGREGATE_PATTERN from " +
-        "packages/mcp/sxt-mcp/src/tools/run-proven-query.ts, drop the verifyHint warning, " +
-        "and update the note in proof-of-sql-foundations/SKILL.md",
+        "COUNT(*) SUCCEEDED — whole-table aggregates work again. Drop the ungrouped-aggregate " +
+        "refusal in packages/mcp/sxt-mcp/src/tools/run-proven-query.ts (AGGREGATE_NOTE in " +
+        "tools/catalog.ts), the verifyHint warning, Q1 in verify-table.mjs, and the note in " +
+        "proof-of-sql-foundations/SKILL.md",
     };
   } catch (err) {
     const msg = String(err?.message ?? err);
-    if (/AttestedCommitments|deserialize prover response/i.test(msg)) {
+    if (/AttestedCommitments|deserialize prover response|execution failed|status.*failed/i.test(msg)) {
       return {
         state: "ok",
-        detail: "still failing with null AttestedCommitments — the refusal remains correct",
+        detail: `whole-table COUNT(*) still fails (${msg.slice(0, 80)}) — the refusal remains correct`,
       };
     }
     if (/403|subscription|No Api Key found|404/i.test(msg)) {

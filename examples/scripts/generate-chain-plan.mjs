@@ -2,33 +2,35 @@
 /**
  * generate-chain-plan.mjs
  *
- * Build an EVM proof plan for a SELECT against an SXT-indexed *chain* table
- * (e.g. ETHEREUM.TRANSACTIONS, ETHEREUM.BLOCKS) — the trust-minimizing
- * counterpart to save-proof-plans.mjs, which works on user-published CSV
- * tables.
+ * Build an EVM proof plan for a SELECT against any provable table on the SXT
+ * catalog: SXT-indexed chain tables (ETHEREUM.BLOCKS) or tables other users
+ * published (find them with `sxt tables`). The trust-minimizing counterpart
+ * to save-proof-plans.mjs, which works on the table you published yourself.
  *
  * Key differences vs save-proof-plans.mjs:
  *   1. No CSV / schema file required — the table's commitments live on
  *      SXT chain catalog directly, addressed by literal ref like
- *      "ETHEREUM.TRANSACTIONS" (no wallet-hex suffix).
+ *      "ETHEREUM.BLOCKS" or "PREFIX_<WALLET HEX>.TABLE".
  *   2. Supports parameterised plans (`$1`, `$2`, …) so a single deployed
  *      contract can prove arbitrary wallet/block combos at call time,
  *      not just one baked-in value.
- *   3. Restricts table refs to the empirically-confirmed zk-committed
- *      surface (see ZK_COMMITTED_TABLES). Probing un-committed tables
- *      returns chain error 254018 and wastes RPC quota.
+ *   3. Reads the table's columns live (lib/plan-columns.mjs: SELECT * on
+ *      commitments_v1_evmProofPlan). A table with no commitments returns
+ *      chain error 254018 and is refused before anything else runs.
  *
  * Usage:
  *   node generate-chain-plan.mjs \
- *     --table ETHEREUM.TRANSACTIONS \
- *     --predicate "FROM_ADDRESS = \$1 AND BLOCK_NUMBER >= \$2" \
- *     --param-types VARCHAR,BIGINT \
- *     --projection "COUNT(*)" \
- *     --name wallet-activity \
- *     [--out ./examples/data/proof-plans/wallet-activity.json]
+ *     --table ETHEREUM.BLOCKS \
+ *     --predicate "BLOCK_NUMBER = \$1" \
+ *     --param-types BIGINT \
+ *     --projection "BLOCK_NUMBER, TRANSACTION_COUNT" \
+ *     --name block-finality \
+ *     [--out ./examples/data/proof-plans/block-finality.json]
  *
  * Sensible defaults (so a tutorial can run end-to-end with one flag):
- *   --projection defaults to "COUNT(*)" (always provable, single BIGINT result)
+ *   --projection defaults to "COUNT(*)" (single BIGINT result). The off-chain
+ *     prover failed a whole-table COUNT(*) on 2026-11-17, so pre-flight the
+ *     filtered count with `sxt verify --sql` before deploying a contract.
  *   --name defaults to a slug of the predicate
  *   --out defaults to ../data/proof-plans/<name>.json
  *   --param-types defaults to empty (literal SQL with no placeholders)
@@ -38,44 +40,31 @@
  * call time and emits a proven result event in its callback.
  */
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { describeTable, NOT_COMMITTED } from './lib/plan-columns.mjs';
 import { dirname, join, resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const RPC = process.env.SXT_RPC_HTTP ?? 'https://rpc.mainnet.sxt.network';
 
-// ─── ZK-committed surface (validated empirically 2026-06-01) ──────────
-// The SXT Studio catalog advertises ~22 indexed chain tables, but only
-// this subset has HyperKZG commitments and therefore returns a valid
-// proof plan from `commitments_v1_evmProofPlan`. Probing other tables
-// returns chain error 254018: "tables do not exist or have incomplete
-// commitment coverage for all schemes". See memory:
-// feedback_zk_committed_surface_narrow.md.
-const ZK_COMMITTED_TABLES = {
-  'ETHEREUM.BLOCKS': {
-    // Columns derived from successful proof plans against this table.
-    // Update as SXT publishes more.
-    columns: {
-      BLOCK_NUMBER: 'BIGINT',
-    },
-    description: 'Ethereum mainnet block index (zk-verified).',
-  },
-  'ETHEREUM.TRANSACTIONS': {
-    // Schema discovered via deliberate error response from the chain
-    // RPC (a query referencing a non-existent column returns the valid
-    // column list). Types inferred from canonical SXT example queries.
-    columns: {
-      TIME_STAMP:        'TIMESTAMP',
-      BLOCK_NUMBER:      'BIGINT',
-      TRANSACTION_HASH:  'VARCHAR',
-      TRANSACTION_INDEX: 'INT',
-      TRANSACTION_FEE:   'BIGINT',
-      FROM_ADDRESS:      'VARCHAR',
-      TO_ADDRESS:        'VARCHAR',
-    },
-    description: 'Ethereum mainnet transaction index (zk-verified).',
-  },
+// ─── Table metadata ───────────────────────────────────────────────────
+// Columns come from the live catalog (lib/plan-columns.mjs), so any provable
+// table works. These only add a description for well-known tables.
+const TABLE_DESCRIPTIONS = {
+  'ETHEREUM.BLOCKS': 'Ethereum mainnet block index (zk-verified).',
 };
+
+// Tables that plan but whose proofs currently fail at the SXT prover. A
+// contract built on one would lock 100 SXT per query() until the 1-hour
+// timeout, so the plan is refused unless --force is passed.
+const UNSTABLE_TABLES = {
+  'ETHEREUM.TRANSACTIONS':
+    'proofs against it fail at the SXT prover ("Query execution failed", 2026-11-10 and 2026-11-16)',
+};
+
+// The renderer (render-onchain-query.mjs) names the byte type BINARY; the
+// chain catalog reports VARBINARY. Same type.
+const RENDERER_TYPE = (t) => (t === 'VARBINARY' ? 'BINARY' : t);
 
 // ─── Argument parsing ─────────────────────────────────────────────────
 
@@ -87,6 +76,7 @@ function parseArgs(argv) {
     paramTypes: [],
     name: null,
     out: null,
+    force: false,
     help: false,
   };
   for (let i = 2; i < argv.length; i++) {
@@ -94,9 +84,10 @@ function parseArgs(argv) {
     if (a === '--table') args.table = argv[++i];
     else if (a === '--predicate') args.predicate = argv[++i];
     else if (a === '--projection') args.projection = argv[++i];
-    else if (a === '--param-types') args.paramTypes = argv[++i].split(',').map((s) => s.trim().toUpperCase());
+    else if (a === '--param-types') args.paramTypes = argv[++i].split(',').map((s) => RENDERER_TYPE(s.trim().toUpperCase()));
     else if (a === '--name') args.name = argv[++i];
     else if (a === '--out') args.out = argv[++i];
+    else if (a === '--force') args.force = true;
     else if (a === '-h' || a === '--help') args.help = true;
   }
   return args;
@@ -106,29 +97,20 @@ function printUsage() {
   console.error('Usage:');
   console.error('  node generate-chain-plan.mjs --table <REF> [--predicate "<SQL>"] [--projection "<EXPR>"] [--param-types T1,T2] [--name NAME] [--out PATH]');
   console.error('');
-  console.error('Flagship demo (wallet activity prover):');
-  console.error('  node generate-chain-plan.mjs \\');
-  console.error('    --table ETHEREUM.TRANSACTIONS \\');
-  console.error('    --predicate "FROM_ADDRESS = \\$1 AND BLOCK_NUMBER >= \\$2" \\');
-  console.error('    --param-types VARCHAR,BIGINT \\');
-  console.error('    --name wallet-activity');
+  console.error('Any provable table works: SXT chain tables or tables other users published.');
+  console.error('Find one with  sxt tables  and check its columns with  sxt tables --describe <REF>');
   console.error('');
-  console.error('Other ready-to-use queries against the zk-committed surface:');
-  console.error('  # L1 transaction receipt proof');
-  console.error('  --table ETHEREUM.TRANSACTIONS --predicate "TRANSACTION_HASH = \\$1" --param-types VARCHAR --name tx-receipt');
-  console.error('');
+  console.error('Examples:');
   console.error('  # L1 block finality proof');
-  console.error('  --table ETHEREUM.BLOCKS --predicate "BLOCK_NUMBER = \\$1" --param-types BIGINT --name block-finality');
+  console.error('  --table ETHEREUM.BLOCKS --predicate "BLOCK_NUMBER = \\$1" --param-types BIGINT \\');
+  console.error('    --projection "BLOCK_NUMBER, TRANSACTION_COUNT" --name block-finality');
   console.error('');
-  console.error('Currently zk-committed tables (validated 2026-06-01):');
-  for (const [ref, def] of Object.entries(ZK_COMMITTED_TABLES)) {
-    console.error(`  • ${ref}  — ${def.description}`);
-    console.error(`    columns: ${Object.keys(def.columns).join(', ')}`);
-  }
+  console.error('  # Membership in a community table');
+  console.error('  --table PREFIX_<WALLET HEX>.TABLE --predicate "NAME = \\$1" --param-types VARCHAR \\');
+  console.error('    --projection "NAME" --name membership');
   console.error('');
-  console.error('Other ETHEREUM.* / BASE.* tables visible in the SXT Studio catalog');
-  console.error('are NOT yet zk-committed (chain returns error 254018). Stick to the');
-  console.error('list above until SXT expands commitment coverage.');
+  console.error('Param types: VARCHAR, BIGINT, INT, SMALLINT, TINYINT, BOOLEAN, TIMESTAMP, VARBINARY (alias BINARY).');
+  console.error('DECIMAL and TIMESTAMP columns cannot be compared in WHERE on the live prover.');
 }
 
 // ─── SQL validation against the proven surface ────────────────────────
@@ -162,26 +144,28 @@ async function main() {
   }
 
   const tableRef = args.table.toUpperCase();
-  if (!(tableRef in ZK_COMMITTED_TABLES)) {
-    console.error(`✗ Table "${tableRef}" is not in the zk-committed surface.`);
-    console.error('');
-    console.error('  The SXT Studio catalog advertises many indexed tables, but only a');
-    console.error('  subset has HyperKZG commitments today (validated empirically). Using');
-    console.error('  an un-committed table will fail with chain error 254018 — the table');
-    console.error('  exists for analytics SQL but not for Proof of SQL.');
-    console.error('');
-    console.error('  Currently committed:');
-    for (const ref of Object.keys(ZK_COMMITTED_TABLES)) {
-      console.error(`    • ${ref}`);
+  if (UNSTABLE_TABLES[tableRef] && !args.force) {
+    console.error(`✗ ${tableRef}: ${UNSTABLE_TABLES[tableRef]}.`);
+    console.error('  A contract built on it would lock 100 SXT per query() until the 1-hour timeout.');
+    console.error('  Pass --force to generate the plan anyway.');
+    process.exit(1);
+  }
+  const live = await describeTable(tableRef);
+  if (!live.provable) {
+    if (live.error.code === NOT_COMMITTED) {
+      console.error(`✗ Table "${tableRef}" is not provable: it is not in the catalog or has no HyperKZG commitments.`);
+      console.error('  Many ETHEREUM.* / BASE.* tables in SXT Studio are indexed for analytics SQL only.');
+      console.error('  List provable candidates with  sxt tables  (check one with  sxt tables --describe <REF>).');
+    } else {
+      console.error(`✗ Chain RPC returned error ${live.error.code}: ${live.error.message}`);
     }
-    console.error('');
-    console.error('  Need a different table? Check periodically — SXT is rolling out');
-    console.error('  commitments to the broader catalog over time. Or publish your own');
-    console.error('  CSV via dataset-publish skill for full control of the data.');
     process.exit(1);
   }
 
-  const tableDef = ZK_COMMITTED_TABLES[tableRef];
+  const tableDef = {
+    columns: Object.fromEntries(live.columns.map((c) => [c.name, RENDERER_TYPE(c.type)])),
+    description: TABLE_DESCRIPTIONS[tableRef] ?? `Provable table ${tableRef} (columns read live).`,
+  };
 
   // Validate referenced columns exist in the known schema.
   const wholeSql = `${args.projection}${args.predicate ? ` ${args.predicate}` : ''}`;
@@ -219,6 +203,12 @@ async function main() {
     process.exit(1);
   }
   const allowedParamTypes = new Set(['VARCHAR', 'BIGINT', 'INT', 'INTEGER', 'BOOLEAN', 'BINARY', 'TIMESTAMP', 'TINYINT', 'SMALLINT']);
+  if (/\b(COUNT|SUM)\s*\(/i.test(args.projection) && !/\bGROUP\s+BY\b/i.test(sql)) {
+    console.log('⚠ Ungrouped aggregate projection. The off-chain prover failed a whole-table COUNT(*) on');
+    console.log('  2026-11-17. Pre-flight the exact SQL with  sxt verify --sql "..."  (literal values in');
+    console.log('  place of $1, $2) before deploying a contract that spends 100 SXT per query().');
+    console.log('');
+  }
   for (const pt of args.paramTypes) {
     if (!allowedParamTypes.has(pt)) {
       console.error(`✗ Unknown --param-types entry "${pt}". Allowed: ${[...allowedParamTypes].join(', ')}`);
@@ -236,7 +226,7 @@ async function main() {
     ? resolvePath(args.out)
     : resolvePath(HERE, '..', 'data', 'proof-plans', `${name}.json`);
 
-  console.log(`▶ Generating proof plan against zk-committed table.`);
+  console.log(`▶ Generating proof plan against provable table.`);
   console.log(`  Table:        ${tableRef}`);
   console.log(`  Projection:   ${args.projection}`);
   console.log(`  Predicate:    ${args.predicate ?? '(none)'}`);
@@ -274,7 +264,7 @@ async function main() {
       console.error('');
       console.error('  Error code 254018 = "incomplete commitment coverage." The table exists');
       console.error('  in SXT\'s catalog (analytics SQL would work) but no HyperKZG commitment');
-      console.error('  has been published for it yet. Stick to the validated zk-committed list.');
+      console.error('  has been published for it yet.');
     } else if (rpcJson.error.code === 254017) {
       console.error('');
       console.error('  Error code 254017 = "schema error." Usually a misspelled column name.');
@@ -298,7 +288,7 @@ async function main() {
   const artifact = {
     kind: 'indexed',
     name,
-    description: `Proof plan against zk-committed ${tableRef}: ${sql.replace(/\s+/g, ' ')}`,
+    description: `Proof plan against ${tableRef}: ${sql.replace(/\s+/g, ' ')}`,
     table: tableRef,
     tableDescription: tableDef.description,
     tableSchema: tableDef.columns,
@@ -325,7 +315,7 @@ async function main() {
   console.log('');
   console.log('Next steps:');
   console.log('  • Off-chain pre-flight (free, ~1s):');
-  console.log(`      SXT_PLAN=${outPath} node verify-table.mjs --params "<arg1>[,<arg2>...]"`);
+  console.log(`      sxt verify --sql "<the SQL above, with literal values in place of $1, $2>"`);
   console.log('');
   console.log('  • Render the parameterized Solidity consumer (verified working):');
   console.log(`      node render-onchain-query.mjs --plan ${outPath} --name <ContractName> --params`);
