@@ -33,7 +33,7 @@ export default function GenerateAuditDeploy() {
 
       <h3 id="generation-flow">What the agent does</h3>
       <ol>
-        <li>Loads <code>dreamspace-query:proof-of-sql-foundations</code> as a guardrail to confirm the SQL fits the proven surface (SELECT, WHERE, GROUP BY, single-chain JOIN, =/≥/≤, AND/OR/NOT, +/-/*, SUM/COUNT, BOOLEAN/BIGINT/VARCHAR/DECIMAL75/TIMESTAMP).</li>
+        <li>Loads <code>sxt-query:proof-of-sql-foundations</code> as a guardrail to confirm the SQL fits the proven surface (SELECT, WHERE, GROUP BY, single-chain JOIN, =/≥/≤, AND/OR/NOT, +/-/*, SUM/COUNT, BOOLEAN/BIGINT/VARCHAR/DECIMAL75/TIMESTAMP).</li>
         <li>Calls <code>commitments_v1_evmProofPlan</code> on the SXT chain RPC to compile the SQL into a 255-byte EVM proof plan + a chain state hash that anchors the proof.</li>
         <li>Substitutes the proof plan and the table&apos;s column types into <code>templates/OnchainQuery.sol.template</code>; writes the resulting <code>OnchainQuery.sol</code> under <code>examples/contracts/sxt-onchain-query/src/</code>.</li>
         <li>Compiles with <code>forge build</code> against the pinned <code>sxt-proof-of-sql</code> and OpenZeppelin v5.2.0 dependencies.</li>
@@ -51,7 +51,7 @@ export default function GenerateAuditDeploy() {
 
       <h2 id="audit">2. Auditing your smart contract</h2>
       <p>
-        Before deploy, run <code>dreamspace-contracts:pre-deploy-audit</code>. The skill produces a structured <code>AUDIT_REPORT.md</code> that combines slither static analysis with onchain due diligence — cross-referencing the contract against user-published reference tables (known-exploit signatures, drainer wallets, trusted-deployer allowlists) and indexed contract event history on SXT.
+        Before deploy, run <code>sxt-contracts:pre-deploy-audit</code>. The skill produces a structured <code>AUDIT_REPORT.md</code> that combines slither static analysis with onchain due diligence — cross-referencing the contract against user-published reference tables (known-exploit signatures, drainer wallets, trusted-deployer allowlists) and indexed contract event history on SXT.
       </p>
 
       <h3 id="audit-prompt">What you say</h3>
@@ -78,7 +78,7 @@ export default function GenerateAuditDeploy() {
 
       <h2 id="deploy">3. Deploy your smart contract</h2>
       <p>
-        Once the audit clears, deploy with <code>dreamspace-contracts:deploy-contract</code>. The skill wraps <code>forge create</code> with explicit network selection, gas estimation, env-var key handling, a mainnet confirmation gate, and an idempotent deploy-state file so re-runs don&apos;t double-deploy.
+        Once the audit clears, deploy with <code>sxt-contracts:deploy-contract</code>. The skill wraps <code>forge create</code> with explicit network selection, gas estimation, env-var key handling, a mainnet confirmation gate, and an idempotent deploy-state file so re-runs don&apos;t double-deploy.
       </p>
 
       <h3 id="deploy-prompt">What you say</h3>

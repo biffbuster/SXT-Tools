@@ -27,7 +27,7 @@ Each handler mirrors the canonical script under `examples/scripts/` line-for-lin
 | `sxt.generate_proof_plan` | None (chain RPC read) | `examples/scripts/save-proof-plans.mjs` |
 | `sxt.audit_contract` | None (pure local `forge build` + `slither`) | `examples/scripts/audit-with-sxt.mjs` |
 | `sxt.deploy_contract` | ~$0.50 ETH gas | `examples/scripts/deploy-onchain-query.mjs` |
-| `sxt://docs/proof-of-sql-foundations` | None (MCP resource, Markdown) | `packages/plugins/dreamspace-query/skills/proof-of-sql-foundations/SKILL.md` |
+| `sxt://docs/proof-of-sql-foundations` | None (MCP resource, Markdown) | `packages/plugins/sxt-query/skills/proof-of-sql-foundations/SKILL.md` |
 
 ---
 

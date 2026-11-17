@@ -23,7 +23,7 @@ type SkillSpec = {
 
 const SKILL_SPECS: SkillSpec[] = [
   {
-    plugin: "dreamspace-data",
+    plugin: "sxt-data",
     skill: "dataset-publish",
     lifecycle: "Publish",
     stage: 1,
@@ -38,7 +38,7 @@ const SKILL_SPECS: SkillSpec[] = [
     ],
   },
   {
-    plugin: "dreamspace-data",
+    plugin: "sxt-data",
     skill: "index-contract",
     lifecycle: "Publish",
     stage: 1,
@@ -54,7 +54,7 @@ const SKILL_SPECS: SkillSpec[] = [
     status: "coming-soon",
   },
   {
-    plugin: "dreamspace-query",
+    plugin: "sxt-query",
     skill: "proof-of-sql-foundations",
     lifecycle: "Foundations",
     stage: 0,
@@ -68,7 +68,7 @@ const SKILL_SPECS: SkillSpec[] = [
     ],
   },
   {
-    plugin: "dreamspace-query",
+    plugin: "sxt-query",
     skill: "run-proven-query",
     lifecycle: "Query",
     stage: 2,
@@ -83,7 +83,7 @@ const SKILL_SPECS: SkillSpec[] = [
     ],
   },
   {
-    plugin: "dreamspace-query",
+    plugin: "sxt-query",
     skill: "chain-data-query",
     lifecycle: "Query",
     stage: 2,
@@ -98,7 +98,7 @@ const SKILL_SPECS: SkillSpec[] = [
     ],
   },
   {
-    plugin: "dreamspace-contracts",
+    plugin: "sxt-contracts",
     skill: "pre-deploy-audit",
     lifecycle: "Audit",
     stage: 3,
@@ -112,7 +112,7 @@ const SKILL_SPECS: SkillSpec[] = [
     ],
   },
   {
-    plugin: "dreamspace-contracts",
+    plugin: "sxt-contracts",
     skill: "deploy-contract",
     lifecycle: "Deploy",
     stage: 4,
@@ -358,7 +358,7 @@ export default function DocsPage() {
         </p>
         <div className="skills-plugin-grid">
           <div className="skills-plugin-card">
-            <div className="skills-plugin-card-name">dreamspace-data</div>
+            <div className="skills-plugin-card-name">sxt-data</div>
             <div className="skills-plugin-card-desc">
               Publish CSVs to SXT chain as Proof-of-SQL-queryable tables, or register EVM
               contracts for event indexing.
@@ -368,7 +368,7 @@ export default function DocsPage() {
             </div>
           </div>
           <div className="skills-plugin-card">
-            <div className="skills-plugin-card-name">dreamspace-query</div>
+            <div className="skills-plugin-card-name">sxt-query</div>
             <div className="skills-plugin-card-desc">
               Verifiable SQL against published tables and SXT&apos;s pre-indexed Ethereum core.
               Foundations + REST execution with proof receipts.
@@ -378,7 +378,7 @@ export default function DocsPage() {
             </div>
           </div>
           <div className="skills-plugin-card">
-            <div className="skills-plugin-card-name">dreamspace-contracts</div>
+            <div className="skills-plugin-card-name">sxt-contracts</div>
             <div className="skills-plugin-card-desc">
               Audit and deploy Solidity contracts that consume Proof of SQL on Base or Ethereum.
             </div>
@@ -399,9 +399,9 @@ export default function DocsPage() {
         </p>
         <pre className="skills-install-block">
           <code>{`/plugin marketplace add biffbuster/sxt-tools
-/plugin install dreamspace-data@sxt-tools
-/plugin install dreamspace-query@sxt-tools
-/plugin install dreamspace-contracts@sxt-tools`}</code>
+/plugin install sxt-data@sxt-tools
+/plugin install sxt-query@sxt-tools
+/plugin install sxt-contracts@sxt-tools`}</code>
         </pre>
       </section>
 

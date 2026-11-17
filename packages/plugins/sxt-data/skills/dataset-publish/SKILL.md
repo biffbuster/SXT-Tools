@@ -9,7 +9,7 @@ description: Publish a dataset to Space and Time as a chain-secured table that s
 
 Publishes a user-supplied dataset as a chain-secured table on Space and Time. The table is committed onchain at creation time, so subsequent `SELECT` queries against it can carry a Proof of SQL receipt — you can prove exactly what data was queried and that it hasn't been tampered with since publish.
 
-This skill is the upstream half of the DreamSpace audit loop. The downstream skill (`pre-deploy-audit` in `dreamspace-contracts`) consumes whatever you publish here as a reference table for cross-references against an indexed target contract.
+This skill is the upstream half of the DreamSpace audit loop. The downstream skill (`pre-deploy-audit` in `sxt-contracts`) consumes whatever you publish here as a reference table for cross-references against an indexed target contract.
 
 ## When to invoke
 
@@ -348,4 +348,4 @@ Refuse and stop if:
 - Apache Arrow JS: https://arrow.apache.org/docs/js/
 - Polkadot.js API: https://polkadot.js.org/docs/api/
 - chain.spaceandtime.io tutorial UI (no-code path): https://chain.spaceandtime.io
-- Sibling skill: `dreamspace-query:proof-of-sql-foundations` (covers what queries you can run against the table afterward).
+- Sibling skill: `sxt-query:proof-of-sql-foundations` (covers what queries you can run against the table afterward).

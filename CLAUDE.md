@@ -1,6 +1,6 @@
 # CLAUDE.md — agent operating instructions for this repo
 
-You are Claude Code working inside the **sxt-tools** repository: a Claude Code marketplace shipping three plugins (`dreamspace-data`, `dreamspace-query`, `dreamspace-contracts`) and seven skills that take a CSV or a verified EVM smart contract (or SXT-indexed Ethereum chain data) from a local folder to a verifiable Proof-of-SQL event on Base mainnet via Space and Time chain.
+You are Claude Code working inside the **sxt-tools** repository: a Claude Code marketplace shipping three plugins (`sxt-data`, `sxt-query`, `sxt-contracts`) and seven skills that take a CSV or a verified EVM smart contract (or SXT-indexed Ethereum chain data) from a local folder to a verifiable Proof-of-SQL event on Base mainnet via Space and Time chain.
 
 This file captures the load-bearing rules for working *inside* this codebase. The human-facing documentation is in [`README.md`](./README.md) (overview/quickstart) and [`HOW_IT_WORKS.md`](./docs/HOW_IT_WORKS.md) (architecture). Read those before responding to onboarding questions; read this file before *modifying* anything.
 
@@ -56,7 +56,7 @@ A dataset reaches the proven surface via one of two input paths: (A) a CSV publi
 - **Don't copy external reference contracts into `src/`** (the SXT HelloWorld.sol, etc.) — cite the upstream URL instead. The `src/` tree is the compile path.
 
 ### Branding & content
-- The repo brand is **`sxt-tools`** (the marketplace handle). Plugins are `dreamspace-data` / `dreamspace-query` / `dreamspace-contracts` (legacy slug). Don't introduce "Space and Time AI" or "spaceandtime-*" plugin names — those refer to a different/aspirational product.
+- The repo brand is **`sxt-tools`** (the marketplace handle). Plugins are `sxt-data` / `sxt-query` / `sxt-contracts` (renamed from the legacy `dreamspace-*` slugs on 2026-11-17; install IDs changed, so old installs must reinstall). Bare "dreamspace" elsewhere means SXT's Dreamspace Studio / indexer, a real SXT product: keep those. Don't introduce "Space and Time AI" or "spaceandtime-*" plugin names — those refer to a different/aspirational product.
 - **The seven real skills are:** `dataset-publish`, `index-contract`, `proof-of-sql-foundations`, `run-proven-query`, `chain-data-query`, `deploy-contract`, `pre-deploy-audit`. (`index-contract`'s CLI — `examples/scripts/index-contract.mjs` — registers SCI tables via `tables.createTableWithSciMetadata`; the resulting tables are provable (verified 2026-06-30) but index live only, from the registration block forward.) Phantom skills referenced in old drafts (`verified-analytics`, `cross-chain-join`, `deploy-erc`, `post-deploy-monitor`, `biscuit-mint`, `queryrouter-call`) **do not exist** — don't reference them in new content.
 - **Don't reference biscuit tokens.** The `dataset-publish` skill does not mint them; the publish flow is just `tables.createTables` + `indexing.submitData`.
 - **Don't add new pages under `src/app/docs/`.** The trimmed structure is intentional. The five pages there (`/docs`, `/docs/quick-start`, `/docs/space-and-time`, `/docs/generate-audit-deploy`, `/docs/mcp`) are the canonical docs site.

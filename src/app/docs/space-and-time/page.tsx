@@ -36,7 +36,7 @@ export default function SpaceAndTime() {
         <li>Cross-chain JOINs</li>
       </ul>
       <p>
-        The <code>dreamspace-query:proof-of-sql-foundations</code> skill enforces this surface and offers rewrites for common requests outside it (e.g. <code>ORDER BY x DESC LIMIT 10</code> → bound the set with <code>WHERE</code>, sort client-side; <code>AVG(x)</code> → return <code>SUM(x)</code> + <code>COUNT(*)</code>, divide client-side).
+        The <code>sxt-query:proof-of-sql-foundations</code> skill enforces this surface and offers rewrites for common requests outside it (e.g. <code>ORDER BY x DESC LIMIT 10</code> → bound the set with <code>WHERE</code>, sort client-side; <code>AVG(x)</code> → return <code>SUM(x)</code> + <code>COUNT(*)</code>, divide client-side).
       </p>
 
       <h2 id="publish-path">Publish path — Substrate extrinsics</h2>

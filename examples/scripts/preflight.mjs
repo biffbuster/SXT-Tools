@@ -131,7 +131,7 @@ await check("marketplace.json valid JSON", () => {
   return `${parsed.plugins.length} plugins declared`;
 });
 
-const PLUGIN_NAMES = ["dreamspace-data", "dreamspace-query", "dreamspace-contracts"];
+const PLUGIN_NAMES = ["sxt-data", "sxt-query", "sxt-contracts"];
 for (const plugin of PLUGIN_NAMES) {
   await check(`plugin.json: ${plugin}`, () => {
     const path = resolve(PLUGINS_DIR, plugin, ".claude-plugin", "plugin.json");

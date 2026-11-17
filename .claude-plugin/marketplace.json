@@ -9,8 +9,8 @@
   },
   "plugins": [
     {
-      "name": "dreamspace-query",
-      "source": "./packages/plugins/dreamspace-query",
+      "name": "sxt-query",
+      "source": "./packages/plugins/sxt-query",
       "description": "Verifiable SQL on Space and Time. Keeps agents inside the Proof of SQL surface.",
       "version": "0.2.0-beta.1",
       "author": {
@@ -22,8 +22,8 @@
       "keywords": ["space-and-time", "proof-of-sql", "zk", "sql", "blockchain", "sxt"]
     },
     {
-      "name": "dreamspace-contracts",
-      "source": "./packages/plugins/dreamspace-contracts",
+      "name": "sxt-contracts",
+      "source": "./packages/plugins/sxt-contracts",
       "description": "Deploy contracts via foundry and run pre-deploy audits combining slither with SXT-indexed onchain due diligence.",
       "version": "0.2.0-beta.1",
       "author": {
@@ -35,8 +35,8 @@
       "keywords": ["space-and-time", "smart-contracts", "audit", "slither", "proof-of-sql", "sxt", "ethereum", "evm", "base"]
     },
     {
-      "name": "dreamspace-data",
-      "source": "./packages/plugins/dreamspace-data",
+      "name": "sxt-data",
+      "source": "./packages/plugins/sxt-data",
       "description": "Publish chain-secured CSV datasets to Space and Time for downstream skills to query with Proof of SQL.",
       "version": "0.2.0-beta.1",
       "author": {

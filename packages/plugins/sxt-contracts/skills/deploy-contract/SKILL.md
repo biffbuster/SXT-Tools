@@ -106,7 +106,7 @@ Report the verification result.
 After a successful deploy, recommend two follow-ups to the user:
 
 1. **Register the contract for SxT indexing** at https://chain.spaceandtime.io → "Index Smart Contracts" tutorial. Once registered, the contract's events become queryable as a proven SQL table that `pre-deploy-audit` Phase 3 can use.
-2. **Run a post-deploy audit** by invoking `dreamspace-contracts:pre-deploy-audit` against the deployed address.
+2. **Run a post-deploy audit** by invoking `sxt-contracts:pre-deploy-audit` against the deployed address.
 
 ## Constructor argument encoding
 
@@ -138,13 +138,13 @@ Refuse to deploy and tell the user why if:
 
 ## Pairs with
 
-- `dreamspace-contracts:pre-deploy-audit` — run before mainnet deploy.
-- `dreamspace-data:dataset-publish` — publish reference data the audit can cross-reference against.
-- `dreamspace-query:proof-of-sql-foundations` — required reading if the deployed contract will consume Proof of SQL receipts via QueryRouter.
+- `sxt-contracts:pre-deploy-audit` — run before mainnet deploy.
+- `sxt-data:dataset-publish` — publish reference data the audit can cross-reference against.
+- `sxt-query:proof-of-sql-foundations` — required reading if the deployed contract will consume Proof of SQL receipts via QueryRouter.
 
 ## References
 
 - Foundry book — `forge create`: https://book.getfoundry.sh/reference/forge/forge-create
 - OpenZeppelin contract templates: https://docs.openzeppelin.com/contracts/
 - SxT smart contract indexing tutorial: https://chain.spaceandtime.io
-- QueryRouter and Onchain Verifier addresses: see `dreamspace-query:proof-of-sql-foundations`.
+- QueryRouter and Onchain Verifier addresses: see `sxt-query:proof-of-sql-foundations`.

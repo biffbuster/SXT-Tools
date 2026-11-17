@@ -11,6 +11,9 @@
   columns live and works on community tables.
 
 ### Changed
+- **Plugins renamed** `dreamspace-data` → `sxt-data`, `dreamspace-query` →
+  `sxt-query`, `dreamspace-contracts` → `sxt-contracts`. Install IDs changed
+  (e.g. `sxt-data@sxt-tools`): uninstall the old plugins and install the new.
 - Only aggregates without GROUP BY are refused (grouped ones verified).
 - `ETHEREUM.TRANSACTIONS` is refused: its proofs fail at the prover.
 

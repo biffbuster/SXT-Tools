@@ -8,12 +8,12 @@ For the full overview, quickstart, troubleshooting, and architecture, see [`READ
 
 ```
 packages/plugins/
-├── dreamspace-data/        skills/dataset-publish/
+├── sxt-data/        skills/dataset-publish/
 │                           skills/index-contract/
-├── dreamspace-query/       skills/proof-of-sql-foundations/
+├── sxt-query/       skills/proof-of-sql-foundations/
 │                           skills/run-proven-query/
 │                           skills/chain-data-query/
-└── dreamspace-contracts/   skills/deploy-contract/
+└── sxt-contracts/   skills/deploy-contract/
                             skills/pre-deploy-audit/
 ```
 
@@ -21,13 +21,13 @@ packages/plugins/
 
 | Skill | Purpose |
 |---|---|
-| `dreamspace-data:dataset-publish` | Publish a CSV to a chain-secured SXT table via Substrate extrinsics + Apache Arrow IPC, EthEcdsa-signed. Auto-infers column types from the first row when no `schema.json` is supplied; never emits `PRIMARY KEY` (would block the dreamspace MAINNET indexer). |
-| `dreamspace-data:index-contract` | Register an EVM contract for SXT to index its events into per-event tables under your namespace, via `examples/scripts/index-contract.mjs` (`tables.createTableWithSciMetadata`) or the chain.spaceandtime.io UI. SCI tables are provable but index live only (no historical backfill). Canonical example: any verified ERC-721 `Transfer`. |
-| `dreamspace-query:proof-of-sql-foundations` | Constraint guardrail. The proven SQL surface (`SELECT/WHERE/GROUP BY`, single-chain `JOIN`, `=/≥/≤`, `AND/OR/NOT`, `+/-/*`, `SUM/COUNT`, `BOOLEAN/BIGINT/VARCHAR/DECIMAL75/TIMESTAMP`). Refuses queries outside the surface and offers rewrites. |
-| `dreamspace-query:run-proven-query` | Bridge from a published table + a natural-language goal to a Proof of SQL query, executed via the SXT REST API (`/v1/zkquery`, JWT-authed) or rendered as an EVM proof plan for onchain consumption. |
-| `dreamspace-query:chain-data-query` | Generate parameterized proof plans against SXT's zk-committed Ethereum index (`ETHEREUM.BLOCKS` / `ETHEREUM.TRANSACTIONS`) or your `index-contract`-populated tables. Trust-minimized L1 → L2 primitives via `IQueryRouter.requestQuery`. |
-| `dreamspace-contracts:deploy-contract` | `forge create` wrapper with explicit network selection, gas estimation, env-var key handling, mainnet confirmation gate, and post-deploy Etherscan verification. |
-| `dreamspace-contracts:pre-deploy-audit` | Static analysis (slither) plus cross-references against user-published reference tables on SXT. Produces a structured audit report. |
+| `sxt-data:dataset-publish` | Publish a CSV to a chain-secured SXT table via Substrate extrinsics + Apache Arrow IPC, EthEcdsa-signed. Auto-infers column types from the first row when no `schema.json` is supplied; never emits `PRIMARY KEY` (would block the dreamspace MAINNET indexer). |
+| `sxt-data:index-contract` | Register an EVM contract for SXT to index its events into per-event tables under your namespace, via `examples/scripts/index-contract.mjs` (`tables.createTableWithSciMetadata`) or the chain.spaceandtime.io UI. SCI tables are provable but index live only (no historical backfill). Canonical example: any verified ERC-721 `Transfer`. |
+| `sxt-query:proof-of-sql-foundations` | Constraint guardrail. The proven SQL surface (`SELECT/WHERE/GROUP BY`, single-chain `JOIN`, `=/≥/≤`, `AND/OR/NOT`, `+/-/*`, `SUM/COUNT`, `BOOLEAN/BIGINT/VARCHAR/DECIMAL75/TIMESTAMP`). Refuses queries outside the surface and offers rewrites. |
+| `sxt-query:run-proven-query` | Bridge from a published table + a natural-language goal to a Proof of SQL query, executed via the SXT REST API (`/v1/zkquery`, JWT-authed) or rendered as an EVM proof plan for onchain consumption. |
+| `sxt-query:chain-data-query` | Generate parameterized proof plans against SXT's zk-committed Ethereum index (`ETHEREUM.BLOCKS` / `ETHEREUM.TRANSACTIONS`) or your `index-contract`-populated tables. Trust-minimized L1 → L2 primitives via `IQueryRouter.requestQuery`. |
+| `sxt-contracts:deploy-contract` | `forge create` wrapper with explicit network selection, gas estimation, env-var key handling, mainnet confirmation gate, and post-deploy Etherscan verification. |
+| `sxt-contracts:pre-deploy-audit` | Static analysis (slither) plus cross-references against user-published reference tables on SXT. Produces a structured audit report. |
 
 ## Install
 
@@ -35,17 +35,17 @@ Via the marketplace:
 
 ```
 /plugin marketplace add biffbuster/sxt-tools
-/plugin install dreamspace-data@sxt-tools
-/plugin install dreamspace-query@sxt-tools
-/plugin install dreamspace-contracts@sxt-tools
+/plugin install sxt-data@sxt-tools
+/plugin install sxt-query@sxt-tools
+/plugin install sxt-contracts@sxt-tools
 ```
 
 For local development:
 
 ```bash
-claude --plugin-dir packages/plugins/dreamspace-data \
-       --plugin-dir packages/plugins/dreamspace-query \
-       --plugin-dir packages/plugins/dreamspace-contracts
+claude --plugin-dir packages/plugins/sxt-data \
+       --plugin-dir packages/plugins/sxt-query \
+       --plugin-dir packages/plugins/sxt-contracts
 ```
 
 ## Skill format

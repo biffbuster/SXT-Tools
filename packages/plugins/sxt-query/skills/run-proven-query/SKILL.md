@@ -21,7 +21,7 @@ This skill depends on the off-chain Proof of SQL prover and is temporarily unava
 Takes a published SXT table reference plus a user goal in natural language, and:
 
 1. **Discovers the table schema** — column names, types — by inspecting the user's local `schema.json` or the publish output.
-2. **Translates the goal into provable SQL** — using only the surface defined in `dreamspace-query:proof-of-sql-foundations`. Refuses or rewrites if the goal can't be expressed in proven mode.
+2. **Translates the goal into provable SQL** — using only the surface defined in `sxt-query:proof-of-sql-foundations`. Refuses or rewrites if the goal can't be expressed in proven mode.
 3. **Submits the query** to the SXT zkQuery REST API (`/v1/zkquery` family) using a JWT obtained by exchanging the user's `SXT_API_KEY`, then polls for the proof and fetches the result.
 4. **Surfaces the proof receipt** alongside the result, with the addresses of the SxT Onchain Verifier so the user can validate the receipt onchain.
 
@@ -211,7 +211,7 @@ Response field reference:
 | Status | `detail` substring | Cause |
 |---|---|---|
 | 401 | `Invalid JWT` | You sent the raw `SXT_API_KEY` as Bearer, or your JWT expired (25-min lifetime). Re-run step 1. |
-| 422 | `does not exist in source network MAINNET` | The table didn't get promoted into the dreamspace MAINNET catalog. Most often caused by a `PRIMARY KEY` clause in the original `CREATE TABLE` — see `dreamspace-data:dataset-publish`. |
+| 422 | `does not exist in source network MAINNET` | The table didn't get promoted into the dreamspace MAINNET catalog. Most often caused by a `PRIMARY KEY` clause in the original `CREATE TABLE` — see `sxt-data:dataset-publish`. |
 | 400 | `source network 'X' is not supported` | You passed something other than the literal `"MAINNET"`. There is no other accepted enum value, even for user-published Community-tier tables. |
 | 422 | other | Surface the body verbatim — the prover names the offending field. |
 
@@ -277,15 +277,15 @@ Then run both, surface the rows + receipt for each, and hand the user the verifi
 
 ## Pairs with
 
-- `dreamspace-query:proof-of-sql-foundations` — the constraint layer; this skill defers to it for surface decisions.
-- `dreamspace-data:dataset-publish` — produces the table this skill queries.
-- `dreamspace-contracts:pre-deploy-audit` — calls this skill (or its pattern) to cross-reference contracts against published reference tables.
+- `sxt-query:proof-of-sql-foundations` — the constraint layer; this skill defers to it for surface decisions.
+- `sxt-data:dataset-publish` — produces the table this skill queries.
+- `sxt-contracts:pre-deploy-audit` — calls this skill (or its pattern) to cross-reference contracts against published reference tables.
 
 ## References
 
 - SXT REST API root: `https://api.makeinfinite.dev` — the SDK appends `/v1/zkquery` (submit), `/v1/zkquery/{id}/status` (poll), `/v1/zkquery/{id}/results` (fetch).
 - Auth exchange endpoint: `https://proxy.api.makeinfinite.dev/auth/apikey` — POST with header `apikey: <your key>`. Returns 25-min access token + 30-min refresh token.
-- Proven SQL surface and refusal rules: see `dreamspace-query:proof-of-sql-foundations`.
+- Proven SQL surface and refusal rules: see `sxt-query:proof-of-sql-foundations`.
 - Onchain verifier addresses (re-verify before deployment): https://docs.spaceandtime.io/docs/what-is-space-and-time-quick-intro
   - Ethereum mainnet: `0x55780Ba21EdFBbFEb7033a0F2FC5Cf55Cd62ACf9`
   - Base mainnet: `0x13b7463a07Aac6Bd483E4329a7F6768Da1A65518`

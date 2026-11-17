@@ -64,7 +64,7 @@ For result-set row caps, check the response from the analytics endpoint or the S
 Space and Time exposes two kinds of tables to the agent:
 
 1. **Indexed smart contract tables.** Once a user registers a target contract with SXT for event indexing (via the "Index Smart Contracts" tutorial on chain.spaceandtime.io), its events and state become queryable as a table the user names. Schema and table naming is set when the user registers the contract.
-2. **User-published tables.** Anything the user uploads via the `dreamspace-data:dataset-publish` skill becomes a queryable table under a schema the user chooses (e.g., `MY_AUDIT.KNOWN_EXPLOITS`).
+2. **User-published tables.** Anything the user uploads via the `sxt-data:dataset-publish` skill becomes a queryable table under a schema the user chooses (e.g., `MY_AUDIT.KNOWN_EXPLOITS`).
 
 Use UPPERCASE schema notation when writing queries: `<SCHEMA>.<TABLE>`.
 
@@ -80,7 +80,7 @@ Follow this checklist in order:
 2. Walk every clause and operator against the proven surface above.
 3. If the query is outside the surface, refuse and offer the rewrite or the unproven fallback.
 4. Otherwise, generate the SQL.
-5. **Submit** via the SXT REST API at `https://api.makeinfinite.dev/v1/zkquery`. Auth requires exchanging your `SXT_API_KEY` for a 25-minute JWT at `https://proxy.api.makeinfinite.dev/auth/apikey` first. The raw API key is NOT a Bearer token. The request body uses `sqlText` plus `sourceNetwork: "MAINNET"` plus `commitmentScheme: "HYPER_KZG"` plus a recent attested `blockHash`. See `dreamspace-query:run-proven-query` for the full execution flow with submit, poll, and fetch.
+5. **Submit** via the SXT REST API at `https://api.makeinfinite.dev/v1/zkquery`. Auth requires exchanging your `SXT_API_KEY` for a 25-minute JWT at `https://proxy.api.makeinfinite.dev/auth/apikey` first. The raw API key is NOT a Bearer token. The request body uses `sqlText` plus `sourceNetwork: "MAINNET"` plus `commitmentScheme: "HYPER_KZG"` plus a recent attested `blockHash`. See `sxt-query:run-proven-query` for the full execution flow with submit, poll, and fetch.
 6. Verify the proof receipt returned alongside the result before relying on the data.
 
 ## Onchain consumption

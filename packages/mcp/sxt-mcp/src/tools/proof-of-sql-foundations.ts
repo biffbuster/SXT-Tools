@@ -6,7 +6,7 @@
  * the server is alive even before any chain-touching tool is implemented.
  *
  * Returns the canonical SKILL.md content from
- * packages/plugins/dreamspace-query/skills/proof-of-sql-foundations/SKILL.md
+ * packages/plugins/sxt-query/skills/proof-of-sql-foundations/SKILL.md
  * so any agent calling sxt.run_proven_query can self-validate its SQL
  * against the proven surface before submitting.
  */
@@ -41,7 +41,7 @@ const FOUNDATIONS_CANDIDATES = [
     "..",
     "packages",
     "plugins",
-    "dreamspace-query",
+    "sxt-query",
     "skills",
     "proof-of-sql-foundations",
     "SKILL.md",
@@ -51,7 +51,7 @@ const FOUNDATIONS_CANDIDATES = [
 const FALLBACK_BODY =
   "# Proof of SQL Foundations\n\n" +
   "Could not locate the canonical SKILL.md on this host. The published source of truth is at:\n" +
-  "https://github.com/biffbuster/sxt-tools/blob/main/packages/plugins/dreamspace-query/skills/proof-of-sql-foundations/SKILL.md\n";
+  "https://github.com/biffbuster/sxt-tools/blob/main/packages/plugins/sxt-query/skills/proof-of-sql-foundations/SKILL.md\n";
 
 export async function readFoundationsResource(): Promise<{
   uri: string;

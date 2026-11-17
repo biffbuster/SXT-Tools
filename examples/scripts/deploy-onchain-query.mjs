@@ -66,7 +66,7 @@ if (existsSync(STATE_FILE)) {
   }
 }
 
-// Mainnet confirmation gate (per dreamspace-contracts:deploy-contract skill rule)
+// Mainnet confirmation gate (per sxt-contracts:deploy-contract skill rule)
 if (chainId === 8453 || chainId === 1) {
   const target = chainId === 8453 ? 'Base mainnet' : 'Ethereum mainnet';
   console.log(`\n⚠ TARGET IS ${target.toUpperCase()}.`);

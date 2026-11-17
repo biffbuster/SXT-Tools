@@ -198,9 +198,9 @@ The same pipeline is exposed as Claude Code skills (7 skills, 3 plugins) and a t
 
 ```
 /plugin marketplace add biffbuster/sxt-tools
-/plugin install dreamspace-data@sxt-tools      # dataset-publish, index-contract
-/plugin install dreamspace-query@sxt-tools     # proof-of-sql-foundations, run-proven-query, chain-data-query
-/plugin install dreamspace-contracts@sxt-tools # pre-deploy-audit, deploy-contract
+/plugin install sxt-data@sxt-tools      # dataset-publish, index-contract
+/plugin install sxt-query@sxt-tools     # proof-of-sql-foundations, run-proven-query, chain-data-query
+/plugin install sxt-contracts@sxt-tools # pre-deploy-audit, deploy-contract
 ```
 
 The MCP server (`packages/mcp/sxt-mcp/`, stdio plus read-only HTTP) exposes `publish_dataset`, `run_proven_query`, `audit_contract`, and `deploy_contract`. It is testnet-default and mainnet double-gated (`mainnet: true` per call AND `SXT_MCP_ALLOW_MAINNET=I-UNDERSTAND` in env). Setup and security model: [`packages/mcp/sxt-mcp/README.md`](./packages/mcp/sxt-mcp/README.md), [`SAFETY.md`](./packages/mcp/sxt-mcp/SAFETY.md).

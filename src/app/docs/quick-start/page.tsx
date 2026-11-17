@@ -81,9 +81,9 @@ $ claude mcp add sxt \\
 $ claude plugin marketplace add "$(pwd)"
 
 # 3.3 Install the three plugins
-$ claude plugin install dreamspace-data@sxt-tools
-$ claude plugin install dreamspace-query@sxt-tools
-$ claude plugin install dreamspace-contracts@sxt-tools`}</code></pre>
+$ claude plugin install sxt-data@sxt-tools
+$ claude plugin install sxt-query@sxt-tools
+$ claude plugin install sxt-contracts@sxt-tools`}</code></pre>
 
       <div className="docs-callout docs-callout-warning">
         <div className="docs-callout-title">Restart your Claude Code session</div>

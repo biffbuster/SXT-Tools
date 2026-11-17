@@ -25,7 +25,7 @@ const DOCS = [
   {
     from: resolve(
       REPO_ROOT,
-      "packages/plugins/dreamspace-query/skills/proof-of-sql-foundations/SKILL.md",
+      "packages/plugins/sxt-query/skills/proof-of-sql-foundations/SKILL.md",
     ),
     to: resolve(PKG_ROOT, "docs", "proof-of-sql-foundations.md"),
   },

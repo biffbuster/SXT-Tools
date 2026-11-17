@@ -23,7 +23,7 @@ Static analyzers like slither catch known code-level patterns: reentrancy, overf
 This skill does **not** rely on pre-built core-chain tables (e.g., a global `ETHEREUM.TRANSACTIONS` table). It uses only:
 
 - Static analysis of the Solidity source or deployed bytecode (works regardless of SXT).
-- User-published reference tables (created via `dreamspace-data:dataset-publish`).
+- User-published reference tables (created via `sxt-data:dataset-publish`).
 - Indexed contract event tables (created when the user registers a target contract with SXT for indexing).
 
 This makes the skill honest about what it can do given the user's setup. If the user has neither published reference data nor registered any contract for indexing, the skill produces a slither-only report and tells the user what they're missing.
@@ -249,9 +249,9 @@ Refuse to produce a verdict (and tell the user why) if:
 
 This skill is the third stage of a three-skill workflow:
 
-1. `dreamspace-data:dataset-publish` — Publish your reference data (known exploits, denylists, allowlists).
+1. `sxt-data:dataset-publish` — Publish your reference data (known exploits, denylists, allowlists).
 2. *(Out-of-band)* — Register the target deployed contract with SXT for event indexing via chain.spaceandtime.io.
-3. `dreamspace-contracts:pre-deploy-audit` — Run slither + cross-references + indexed-event analysis. Output a report.
+3. `sxt-contracts:pre-deploy-audit` — Run slither + cross-references + indexed-event analysis. Output a report.
 
 Each stage is independently useful. Together they demonstrate the entire DreamSpace value loop: bring your data, index your target, get verifiable cross-references.
 
@@ -259,6 +259,6 @@ Each stage is independently useful. Together they demonstrate the entire DreamSp
 
 - Slither: https://github.com/crytic/slither
 - SXT smart contract indexing: https://chain.spaceandtime.io (look for "Index Smart Contracts" tutorial)
-- Proof of SQL surface and refusal rules: see `dreamspace-query:proof-of-sql-foundations`.
-- Publishing reference data: see `dreamspace-data:dataset-publish`.
-- Onchain consumption (verifier addresses): see `dreamspace-query:proof-of-sql-foundations`.
+- Proof of SQL surface and refusal rules: see `sxt-query:proof-of-sql-foundations`.
+- Publishing reference data: see `sxt-data:dataset-publish`.
+- Onchain consumption (verifier addresses): see `sxt-query:proof-of-sql-foundations`.

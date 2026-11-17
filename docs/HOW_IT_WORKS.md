@@ -63,16 +63,16 @@ That separation is what makes the toolkit portable: the skills work in any agent
 
 ```
 packages/plugins/
-├── dreamspace-data/
+├── sxt-data/
 │   └── skills/
 │       ├── dataset-publish/SKILL.md       input path A — CSV
 │       └── index-contract/SKILL.md        input path B — verified EVM contract
-├── dreamspace-query/
+├── sxt-query/
 │   └── skills/
 │       ├── proof-of-sql-foundations/SKILL.md
 │       ├── run-proven-query/SKILL.md
 │       └── chain-data-query/SKILL.md       generates parameterized plans
-└── dreamspace-contracts/
+└── sxt-contracts/
     └── skills/
         ├── deploy-contract/SKILL.md
         └── pre-deploy-audit/SKILL.md
@@ -80,7 +80,7 @@ packages/plugins/
 
 Each `SKILL.md` is loaded by the agent when its trigger phrases match the user's prompt. The agent reads the body and follows the instructions verbatim. Below: what each skill enables Claude to do *without you knowing the underlying scripts exist*.
 
-### `dreamspace-data:dataset-publish` — "publish this CSV"
+### `sxt-data:dataset-publish` — "publish this CSV"
 
 **Triggers on:** "publish my CSV", "upload this dataset to SXT", "create a new table on Space and Time", "I have a CSV I want to query with proofs."
 
@@ -97,7 +97,7 @@ Each `SKILL.md` is loaded by the agent when its trigger phrases match the user's
 
 **What you see in the conversation:** a confirmation that your CSV is now a chain-secured table with row count, plus the table reference (`MY_PROJECT_<ADDR>.MY_TABLE`).
 
-### `dreamspace-data:index-contract` — "index this contract's events"
+### `sxt-data:index-contract` — "index this contract's events"
 
 **Triggers on:** "index this contract", "watch Seaport / Uniswap / CryptoPunks events", "give me a queryable table of contract X's history", "register this address with SXT for event indexing."
 
@@ -113,7 +113,7 @@ Each `SKILL.md` is loaded by the agent when its trigger phrases match the user's
 
 **What you see in the conversation:** the registration plan (DDL + metadata per event), the finalized block hashes, the funding instructions, and an honest note that proofs against the new tables stay blocked until SXT promotes SCI to the zk-committed catalog.
 
-### `dreamspace-query:proof-of-sql-foundations` — the constraint guardrail
+### `sxt-query:proof-of-sql-foundations` — the constraint guardrail
 
 **Triggers on:** any time another skill is generating SQL. Activates passively as a check, not via direct user invocation.
 
@@ -121,7 +121,7 @@ Each `SKILL.md` is loaded by the agent when its trigger phrases match the user's
 
 **What you see in the conversation:** if your request is in-bounds, nothing — the skill is silent. If out-of-bounds, Claude says *"that needs `ORDER BY` which isn't provable. I can rewrite it as `WHERE x = …` instead, which IS provable, or run it unproven if you only want exploration."*
 
-### `dreamspace-query:run-proven-query` — "prove this row is in my table"
+### `sxt-query:run-proven-query` — "prove this row is in my table"
 
 **Triggers on:** "prove that 0xABC… is in my table", "verify the row count", "run a proven query", "is X a member of my dataset?"
 
@@ -136,7 +136,7 @@ Each `SKILL.md` is loaded by the agent when its trigger phrases match the user's
 
 **What you see in the conversation:** the proven row, the proof's chain-state binding, and either an API receipt or four BaseScan-linkable tx hashes — depending on which path you chose.
 
-### `dreamspace-query:chain-data-query` — "query SXT-indexed chain data with a proof plan"
+### `sxt-query:chain-data-query` — "query SXT-indexed chain data with a proof plan"
 
 **Triggers on:** "prove this happened on Ethereum", "verify this transaction in a Solidity contract", "I want a Base contract that consumes Ethereum chain history", "generate a parameterized proof plan."
 
@@ -149,7 +149,7 @@ Each `SKILL.md` is loaded by the agent when its trigger phrases match the user's
 
 **Why this skill exists separately from `run-proven-query`:** parameterized chain-data plans require a different template + a different proof-plan generation flow (chain-state binding, not table-commitment binding). The skill is the dedicated entrypoint for the L1 → L2 trust-minimization use case.
 
-### `dreamspace-contracts:deploy-contract` — "deploy this contract"
+### `sxt-contracts:deploy-contract` — "deploy this contract"
 
 **Triggers on:** "deploy this Solidity contract", "deploy to Base / Sepolia / mainnet", "ship this query contract."
 
@@ -164,7 +164,7 @@ Each `SKILL.md` is loaded by the agent when its trigger phrases match the user's
 
 **What you see:** a deployed contract address and the deploy tx, plus a hint about the next step (approve + call query()).
 
-### `dreamspace-contracts:pre-deploy-audit` — "audit this before mainnet"
+### `sxt-contracts:pre-deploy-audit` — "audit this before mainnet"
 
 **Triggers on:** "audit this contract", "check this for safety", "is this safe to deploy", "cross-reference against known exploits."
 
@@ -189,7 +189,7 @@ This is what an end-to-end session looks like in the Claude Code CLI. The user t
 │ I can prove on-chain that specific addresses are members of it.        │
 └────────────────────────────────────────────────────────────────────────┘
 
-┌─ Claude (loads dreamspace-data:dataset-publish) ──────────────────────┐
+┌─ Claude (loads sxt-data:dataset-publish) ──────────────────────┐
 │ I'll publish this dataset to the SXT chain. Looking at the CSV I see  │
 │ one VARCHAR column STAKER with 2062 rows.                             │
 │                                                                       │
@@ -225,7 +225,7 @@ This is what an end-to-end session looks like in the Claude Code CLI. The user t
 │ is a member of that table. I want it as a Base mainnet event.          │
 └────────────────────────────────────────────────────────────────────────┘
 
-┌─ Claude (loads dreamspace-query:run-proven-query) ────────────────────┐
+┌─ Claude (loads sxt-query:run-proven-query) ────────────────────┐
 │ This is the on-chain proof path. Plan:                                │
 │                                                                       │
 │ 1. Generate hex proof plan via the SXT chain RPC (free)               │
@@ -316,20 +316,20 @@ The seven skills are split across three plugin packages so you can install only 
 
 | Plugin | When to install |
 |---|---|
-| `dreamspace-data` | You want to publish CSV → SXT chain |
-| `dreamspace-query` | You want to run proven SQL (off-chain or on-chain) |
-| `dreamspace-contracts` | You want to deploy/audit Solidity contracts that consume Proof of SQL |
+| `sxt-data` | You want to publish CSV → SXT chain |
+| `sxt-query` | You want to run proven SQL (off-chain or on-chain) |
+| `sxt-contracts` | You want to deploy/audit Solidity contracts that consume Proof of SQL |
 
 Install one, two, or all three:
 
 ```
 /plugin marketplace add biffbuster/sxt-tools
-/plugin install dreamspace-data@sxt-tools
-/plugin install dreamspace-query@sxt-tools
-/plugin install dreamspace-contracts@sxt-tools
+/plugin install sxt-data@sxt-tools
+/plugin install sxt-query@sxt-tools
+/plugin install sxt-contracts@sxt-tools
 ```
 
-A project doing only off-chain analytics installs `dreamspace-data` + `dreamspace-query` and skips contracts entirely. A project deploying audited contracts that consume SXT data installs all three. The skills cross-reference each other via "pairs with" sections in their bodies, so the agent knows which other skill to load when one's job ends.
+A project doing only off-chain analytics installs `sxt-data` + `sxt-query` and skips contracts entirely. A project deploying audited contracts that consume SXT data installs all three. The skills cross-reference each other via "pairs with" sections in their bodies, so the agent knows which other skill to load when one's job ends.
 
 ---
 
@@ -338,9 +338,9 @@ A project doing only off-chain analytics installs `dreamspace-data` + `dreamspac
 ```bash
 # 1. Add the marketplace and install the plugins you need
 /plugin marketplace add biffbuster/sxt-tools
-/plugin install dreamspace-data@sxt-tools
-/plugin install dreamspace-query@sxt-tools
-/plugin install dreamspace-contracts@sxt-tools
+/plugin install sxt-data@sxt-tools
+/plugin install sxt-query@sxt-tools
+/plugin install sxt-contracts@sxt-tools
 
 # 2. Have these credentials ready (for any project, not just this repo)
 #    PRIVATE_KEY        ETH key, separate from your daily wallet
