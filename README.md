@@ -238,7 +238,7 @@ The MCP server (`packages/mcp/sxt-mcp/`, stdio plus read-only HTTP) exposes `pub
 ## More
 
 - Architecture deep-dive: [`HOW_IT_WORKS.md`](./docs/HOW_IT_WORKS.md)
-- Reviewer walkthrough with mainnet evidence: [`REVIEW.md`](./docs/REVIEW.md) · beta onboarding: [`BETA.md`](./docs/BETA.md) · [`CHANGELOG.md`](./CHANGELOG.md)
+- [`CHANGELOG.md`](./CHANGELOG.md)
 - [`CONTRIBUTING.md`](./.github/CONTRIBUTING.md) · [`SECURITY.md`](./.github/SECURITY.md)
 - [Space and Time docs](https://docs.spaceandtime.io) · [PoSQL syntax spec](https://github.com/spaceandtimefdn/sxt-proof-of-sql/blob/main/docs/SQLSyntaxSpecification.md) · [sxt-chain-examples](https://github.com/spaceandtimefdn/sxt-chain-examples) · [sxt-proof-of-sql-sdk](https://github.com/spaceandtimefdn/sxt-proof-of-sql-sdk)
 

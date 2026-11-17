@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased (2026-11-17)
+
+### Added
+- MCP `sxt.list_tables` lists every public community table via the
+  MakeInfinite discovery API, falling back to the curated list when the API
+  or the key is unavailable. `sxt.run_proven_query` works on any public
+  table, with a free planner preflight, a large-table guard and decoded rows.
+- CLI: `sxt tables`, `sxt verify --table/--sql`; `sxt chain-plan` reads
+  columns live and works on community tables.
+
+### Changed
+- Only aggregates without GROUP BY are refused (grouped ones verified).
+- `ETHEREUM.TRANSACTIONS` is refused: its proofs fail at the prover.
+
+### Removed
+- `docs/BETA.md`, `docs/REVIEW.md`, `docs/docs-conformance.md` (stale
+  beta-era documents), the TRANSACTIONS-based `CollectionActivity` example,
+  and unused images in `public/`.
+
 ## Unreleased (post-beta.1 battle-test pass, 2026-06-11)
 
 ### Added

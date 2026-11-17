@@ -363,38 +363,61 @@ const COMMON_NOTES = [
   "ETHEREUM.TRANSACTIONS is not listed: proofs against it currently fail at the SXT prover.",
 ];
 
+async function curatedOnly(needle: string | undefined, first: boolean, reason: string) {
+  return {
+    catalog: "MAINNET",
+    source: "curated",
+    tables: first ? await curated(needle) : [],
+    nextCursor: null,
+    notes: [reason, ...COMMON_NOTES],
+  };
+}
+
 export async function listTablesHandler(args: ListTablesArgs, ctx: ToolContext = {}) {
   const needle = args.search?.toLowerCase();
   const get = discoveryGetter(ctx);
   const first = !args.cursor;
 
   if (!get) {
-    return {
-      catalog: "MAINNET",
-      source: "curated",
-      tables: first ? await curated(needle) : [],
-      nextCursor: null,
-      notes: [
-        "Only the curated tables are listed: set SXT_API_KEY to list every public table on MAINNET.",
-        ...COMMON_NOTES,
-      ],
-    };
+    return curatedOnly(
+      needle,
+      first,
+      "Only the curated tables are listed: set SXT_API_KEY to list every public table on MAINNET.",
+    );
   }
 
-  const { community } = await listSchemas(get);
+  // The discovery API has no published SLA. If it is down, list what we know
+  // proves rather than failing the agent's first call.
+  let community: string[];
+  try {
+    ({ community } = await listSchemas(get));
+  } catch (err) {
+    logger.info(`discovery unavailable, serving the curated list: ${(err as Error).message}`);
+    return curatedOnly(
+      needle,
+      first,
+      "The public table directory is unavailable right now, so only the curated tables are listed. " +
+        "sxt.describe_table still works for any PREFIX.TABLE.",
+    );
+  }
   const schemas = args.schema ? community.filter((s) => s === args.schema) : community;
   const start = Number(args.cursor ?? 0);
 
   const found: PublicTable[] = [];
+  const skipped: string[] = [];
   let i = start;
   let fetched = 0;
   while (i < schemas.length && found.length < args.limit && fetched < MAX_SCHEMA_FETCHES) {
     const batch = schemas.slice(i, i + FETCH_CONCURRENCY);
     fetched += batch.filter((s) => !isSchemaCached(s)).length;
-    const lists = await Promise.all(batch.map((s) => listSchemaTables(get, s, "community")));
-    for (const t of lists.flat()) {
-      if (!needle || t.table.toLowerCase().includes(needle)) found.push(t);
-    }
+    const lists = await Promise.allSettled(batch.map((s) => listSchemaTables(get, s, "community")));
+    lists.forEach((r, j) => {
+      if (r.status === "rejected") {
+        skipped.push(batch[j]!);
+        return;
+      }
+      for (const t of r.value) if (!needle || t.table.toLowerCase().includes(needle)) found.push(t);
+    });
     i += batch.length;
   }
 
@@ -421,6 +444,9 @@ export async function listTablesHandler(args: ListTablesArgs, ctx: ToolContext =
       "Community tables are published by SXT users. provable: null means not checked yet; " +
         "sxt.describe_table checks it for free.",
       ...(i < schemas.length ? ["More tables exist: call again with cursor = nextCursor (and the same search)."] : []),
+      ...(skipped.length
+        ? [`Could not read ${skipped.length} schema(s) this time (${skipped.join(", ")}); they are retried on the next call.`]
+        : []),
       ...COMMON_NOTES,
     ],
   };

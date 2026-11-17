@@ -140,6 +140,35 @@ describe("sxt.list_tables with a key", () => {
     expect(calls.schema).toBe(2);
   });
 
+  it("falls back to the curated list when discovery is down", async () => {
+    fakeWorld({ community: [], tables: {}, provable: { "ETHEREUM.BLOCKS": [["BLOCK_NUMBER", BIGINT]] } });
+    const inner = globalThis.fetch;
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) =>
+      url.includes("/v2/discover/") ? new Response("upstream down", { status: 503 }) : inner(url, init),
+    );
+    const r = await listTablesHandler({ limit: 50 }, ctx);
+    expect(r.source).toBe("curated");
+    expect(r.tables.map((t) => t.table)).toContain("ETHEREUM.BLOCKS");
+    expect(r.notes.join(" ")).toContain("unavailable");
+  });
+
+  it("skips a schema that fails instead of failing the page", async () => {
+    fakeWorld({
+      community: ["BAD_ABC", "GOOD_ABC"],
+      tables: { GOOD_ABC: [{ table: "T", size: "1 KB" }] },
+      provable: {},
+    });
+    const inner = globalThis.fetch;
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) =>
+      url.includes("schema=BAD_ABC") ? new Response("nope", { status: 400 }) : inner(url, init),
+    );
+    const r = await listTablesHandler({ schema: "GOOD_ABC", limit: 50 }, ctx);
+    expect(r.tables.map((t) => t.table)).toEqual(["GOOD_ABC.T"]);
+    const all = await listTablesHandler({ limit: 50, cursor: "0" }, ctx);
+    expect(all.tables.map((t) => t.table)).toEqual(["GOOD_ABC.T"]);
+    expect(all.notes.join(" ")).toContain("BAD_ABC");
+  });
+
   it("lists one schema when asked", async () => {
     fakeWorld({
       community: ["IRIS_DATASET_ABC", "OTHER_ABC"],
