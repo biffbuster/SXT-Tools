@@ -140,6 +140,20 @@ describe("sxt.list_tables with a key", () => {
     expect(calls.schema).toBe(2);
   });
 
+  it("scans schemas whose name matches the search first", async () => {
+    const community = [...communitySchemas(30), "IRIS_DATASET_ABC"];
+    const calls = fakeWorld({
+      community,
+      tables: { IRIS_DATASET_ABC: [{ table: "IRIS", size: "5.2 KB" }] },
+      provable: {},
+    });
+
+    const page = await listTablesHandler({ search: "iris", limit: 1 }, ctx);
+    expect(page.tables.map((t) => t.table)).toEqual(["IRIS_DATASET_ABC.IRIS"]);
+    expect(calls.table).toBe(4); // one concurrent batch, not the 12-schema cap
+    expect(page.nextCursor).toBe("4");
+  });
+
   it("falls back to the curated list when discovery is down", async () => {
     fakeWorld({ community: [], tables: {}, provable: { "ETHEREUM.BLOCKS": [["BLOCK_NUMBER", BIGINT]] } });
     const inner = globalThis.fetch;

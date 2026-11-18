@@ -400,7 +400,16 @@ export async function listTablesHandler(args: ListTablesArgs, ctx: ToolContext =
         "sxt.describe_table still works for any PREFIX.TABLE.",
     );
   }
-  const schemas = args.schema ? community.filter((s) => s === args.schema) : community;
+  // A search scans schemas whose name matches first, so "iris" reaches
+  // IRIS_DATASET_* on the first page. The order is stable, so cursors still line up.
+  const schemas = args.schema
+    ? community.filter((s) => s === args.schema)
+    : needle
+      ? [
+          ...community.filter((s) => s.toLowerCase().includes(needle)),
+          ...community.filter((s) => !s.toLowerCase().includes(needle)),
+        ]
+      : community;
   const start = Number(args.cursor ?? 0);
 
   const found: PublicTable[] = [];
