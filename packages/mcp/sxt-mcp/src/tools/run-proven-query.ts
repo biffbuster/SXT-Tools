@@ -148,7 +148,9 @@ function validateProvenSurface(sql: string): void {
       "SQL_REJECTED",
       "SQL rejected before submission: an aggregate with no GROUP BY fails at the SXT prover today. " +
         AGGREGATE_NOTE +
-        " If the prover has since fixed this, set SXT_MCP_ALLOW_AGGREGATES=1 to bypass.",
+        // The operator override (SXT_MCP_ALLOW_AGGREGATES) is documented in SAFETY.md, not
+        // here: a hosted user cannot set it, so the message offers a rewrite instead.
+        " Rewrite it with GROUP BY on a non-VARCHAR column, or select the rows with a WHERE filter or LIMIT.",
     );
   }
 }

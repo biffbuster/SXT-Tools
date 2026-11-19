@@ -368,19 +368,39 @@ export class SxtOAuthProvider implements OAuthServerProvider {
   }
 }
 
-function securityHeaders(res: Response): void {
+/**
+ * CSP source for the client's redirect URI. Browsers apply form-action to the
+ * redirect that follows the consent POST, so 'self' alone blocks the hop back
+ * to the client.
+ */
+function redirectSource(redirectUri: string | undefined): string {
+  if (!redirectUri) return "";
+  try {
+    const u = new URL(redirectUri);
+    // Custom schemes (cursor://, vscode://) have an opaque origin; allow the scheme.
+    return u.protocol === "http:" || u.protocol === "https:" ? ` ${u.origin}` : ` ${u.protocol}`;
+  } catch {
+    return "";
+  }
+}
+
+function securityHeaders(res: Response, redirectUri?: string): void {
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("X-Frame-Options", "DENY");
-  res.setHeader("Referrer-Policy", "no-referrer");
+  // Not no-referrer: under that policy browsers send `Origin: null` on the
+  // consent POST, which the origin check rejects. same-origin still sends no
+  // referrer to the client or any other site.
+  res.setHeader("Referrer-Policy", "same-origin");
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader(
     "Content-Security-Policy",
-    "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+    `default-src 'none'; style-src 'unsafe-inline'; form-action 'self'${redirectSource(redirectUri)}; ` +
+      "frame-ancestors 'none'; base-uri 'none'",
   );
 }
 
 function sendConsent(res: Response, status: number, view: Parameters<typeof renderConsentPage>[0]): void {
-  securityHeaders(res);
+  securityHeaders(res, view.redirectUri);
   res.status(status).type("html").send(renderConsentPage(view));
 }
 

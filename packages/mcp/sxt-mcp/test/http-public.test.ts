@@ -97,6 +97,10 @@ async function startAuthorize(clientId: string, challenge: string): Promise<stri
   const res = await fetch(u, { redirect: "manual" });
   expect(res.status).toBe(200);
   expect(res.headers.get("x-frame-options")).toBe("DENY");
+  // no-referrer would make browsers send `Origin: null` on the consent POST.
+  expect(res.headers.get("referrer-policy")).toBe("same-origin");
+  // form-action must allow the redirect back to the client.
+  expect(res.headers.get("content-security-policy")).toContain("form-action 'self' http://127.0.0.1:9999;");
   const html = await res.text();
   expect(html).not.toContain("<script>");
   const m = html.match(/name="consent" value="([^"]+)"/);
@@ -107,7 +111,8 @@ async function startAuthorize(clientId: string, challenge: string): Promise<stri
 async function consent(consentToken: string, key: string, decision = "approve") {
   return fetch(`${base}/oauth/consent`, {
     method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
+    // A browser submitting the consent form sends the page's own origin.
+    headers: { "content-type": "application/x-www-form-urlencoded", origin: new URL(base).origin },
     body: new URLSearchParams({ consent: consentToken, sxt_api_key: key, decision }).toString(),
     redirect: "manual",
   });
