@@ -205,6 +205,13 @@ describe("sxt.describe_table with a key", () => {
     expect(r).toMatchObject({ owner: "community", size: "5.2 KB", provable: true });
     expect(r.exampleSql).toBe("SELECT VARIETY FROM IRIS_DATASET_DESC.IRIS LIMIT 10");
   });
+
+  it("warns on an unstable table and says the refusal spends nothing", async () => {
+    fakeWorld({ community: [], tables: {}, provable: { "ETHEREUM.TRANSACTIONS": [["BLOCK_NUMBER", BIGINT]] } });
+    const r = await describeTableHandler({ table: "ETHEREUM.TRANSACTIONS" }, ctx);
+    expect(r.warning).toContain("fail at the SXT prover");
+    expect(r.warning).toContain("refuses this table before submission, so no credit is spent");
+  });
 });
 
 describe("sxt.run_proven_query guards (nothing submitted)", () => {

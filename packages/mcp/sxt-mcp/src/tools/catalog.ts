@@ -75,7 +75,7 @@ const KNOWN_TABLES: readonly KnownTable[] = [
   },
 ];
 
-/** Tables that plan but currently fail at the prover. run_proven_query warns before submitting. */
+/** Tables that plan but currently fail at the prover. run_proven_query refuses them before submitting. */
 export const UNSTABLE_TABLES: Readonly<Record<string, string>> = {
   "ETHEREUM.TRANSACTIONS":
     "Proofs against ETHEREUM.TRANSACTIONS currently fail at the SXT prover (\"Query execution failed\") " +
@@ -289,7 +289,14 @@ export async function describeTableHandler(args: z.infer<typeof describeTableSch
     ...(catalog
       ? { owner: catalog.owner, size: catalog.size, created: catalog.created, immutable: catalog.immutable }
       : {}),
-    ...(UNSTABLE_TABLES[d.table] ? { warning: UNSTABLE_TABLES[d.table] } : {}),
+    // Say the refusal is pre-submission, or agents assume a try would spend a credit.
+    ...(UNSTABLE_TABLES[d.table]
+      ? {
+          warning:
+            `${UNSTABLE_TABLES[d.table]} sxt.run_proven_query refuses this table before submission, ` +
+            "so no credit is spent and the prover is never called.",
+        }
+      : {}),
     exampleSql: exampleSql(d),
     notes: [
       "Use these exact column names (UPPERCASE) in sxt.run_proven_query.",
