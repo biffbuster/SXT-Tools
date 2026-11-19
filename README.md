@@ -139,12 +139,12 @@ sxt chain-plan \
   --projection "BLOCK_NUMBER, TRANSACTION_COUNT" \
   --name block-finality
 
-sxt verify --sql "SELECT BLOCK_NUMBER, TRANSACTION_COUNT FROM ETHEREUM.BLOCKS WHERE BLOCK_NUMBER = 20000000"
+sxt verify --sql "SELECT BLOCK_NUMBER, TRANSACTION_COUNT FROM ETHEREUM.BLOCKS WHERE BLOCK_NUMBER = 22432845"
 sxt render --plan ../data/proof-plans/block-finality.json --name BlockFinality --params
 # contract with query(int64 block_number); forge build, sxt deploy, then call it
 ```
 
-`ETHEREUM.TRANSACTIONS` is excluded: it plans, but proofs against it fail at the prover and have stalled the prover for every user (2026-11-10, 2026-11-16). `chain-plan` refuses it unless `--force` is passed. On the live catalog, hashes and addresses are VARBINARY (literal `X'…'` or bare `0x…`, param type `VARBINARY`), and DECIMAL or TIMESTAMP columns cannot be compared in WHERE.
+Of SXT's 22 `ETHEREUM.*` tables, three prove today: `BLOCKS`, `NATIVE_WALLETS` and `ERC173_OWNERSHIP_TRANSFERRED`. Their indexed rows start near block 22,432,845 (May 2025); earlier blocks verify but return no rows. Eleven others plan but fail at the prover, including `TRANSACTIONS`, which has also stalled the prover for every user (2026-11-10, 2026-11-16). `chain-plan` refuses those unless `--force` is passed. On the live catalog, hashes and addresses are VARBINARY (literal `X'…'` or bare `0x…`, param type `VARBINARY`), and DECIMAL or TIMESTAMP columns cannot be compared in WHERE.
 
 ---
 
@@ -183,10 +183,10 @@ Status (Nov 2026): SCI tables are provable. A live off-chain proof against a reg
 
 ---
 
-## Known limitations (verified 2026-11-17)
+## Known limitations (verified 2026-11-19)
 
-- Aggregates prove only with `GROUP BY` on one non-VARCHAR column. A whole-table `COUNT(*)` plans but fails at the prover, and `GROUP BY` on a VARCHAR column does not compile. Point lookups, filtered scans and `LIMIT` samples prove reliably.
-- SXT's own chain-data surface is narrow: `ETHEREUM.BLOCKS` proves; `ETHEREUM.TRANSACTIONS` fails at the prover; the rest of `ETHEREUM.*` has no commitments. Community tables published by other users prove (a cross-owner proof verified on 2026-11-17).
+- Aggregates prove only with `GROUP BY` on one non-VARCHAR column (BIGINT and DECIMAL verified). A whole-table `COUNT(*)` plans but fails at the prover, and `GROUP BY` on a VARCHAR column does not compile. Point lookups, filtered scans and `LIMIT` samples prove reliably.
+- SXT's own chain-data surface is narrow. SXT's docs list 22 `ETHEREUM.*` tables as ZK-proven and the planner accepts all 22, but a live proof per table found three that execute: `BLOCKS`, `NATIVE_WALLETS` and `ERC173_OWNERSHIP_TRANSFERRED`. Eleven fail at execution even with a narrow `WHERE` (`TRANSACTIONS`, `CONTRACTS` and the token and NFT contract, approval, owner and transfer tables); the CLI and MCP refuse them. Five large tables are unverified and three `PROXY_*` tables are empty. Community tables published by other users prove (a cross-owner proof verified on 2026-11-17).
 - SCI tables index live only (no historical backfill). Filters on their BINARY address columns are planned by the prover but not yet proven end to end.
 - `sxt-proof-of-sql-sdk` is pinned at 0.54.0: 0.56.1/0.57.1 ship a broken wasm bundle.
 
@@ -225,7 +225,7 @@ The MCP server (`packages/mcp/sxt-mcp/`, stdio plus read-only HTTP) exposes `pub
 | Symptom | Cause and fix |
 |---|---|
 | `FundsUnavailable` on publish/index | The 20 SXT per-object creation burn. Fund SXT chain native (at least 40 for a first publish). `sxt publish` pre-checks and tells you exactly. |
-| `Query execution failed 3 times` | The prover could not run this query: a whole-table aggregate or `ETHEREUM.TRANSACTIONS`. Retrying fails the same way. Rewrite as a point lookup, filtered scan, or grouped aggregate. |
+| `Query execution failed 3 times` | The prover could not run this query: a whole-table aggregate, or one of the SXT tables that fail at execution today (see Known limitations). Retrying fails the same way. Rewrite as a point lookup, filtered scan, or grouped aggregate, or use a table that proves. |
 | `/v1/zkquery` returns `422 "does not exist in source network MAINNET"` | Table not promoted into the proven catalog. For your own tables: a `PRIMARY KEY` clause in the DDL (this CLI never emits one; applies to tables made elsewhere). For SCI tables: expected until SXT promotes SCI. |
 | `query()` times out at 1h, no callback | Same root cause as the 422, which is why `sxt verify` is mandatory before `sxt query`. Refund: `cancelQuery(queryId, payment)` after the timeout; `sxt inspect <txHash>` decodes the Payment struct. |
 | `401 SECURITY: Invalid JWT` | Raw API key used as Bearer. Exchange at `proxy.api.makeinfinite.dev/auth/apikey` first; all CLI commands do this automatically. |

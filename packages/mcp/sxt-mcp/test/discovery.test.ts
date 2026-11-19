@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { describeTableHandler, listTablesHandler } from "../src/tools/catalog.js";
 import { runProvenQueryHandler, setProverDepsForTest } from "../src/tools/run-proven-query.js";
 import { clearDiscoveryCache, parseSize } from "../src/lib/discovery.js";
-import { clearTokenCache } from "../src/lib/prover.js";
+import { clearTokenCache, withExactIntegers } from "../src/lib/prover.js";
 import { formatDecimal, toRows } from "../src/lib/results.js";
 import { sanitizeError, UpstreamError } from "../src/lib/sanitize.js";
 
@@ -212,6 +212,13 @@ describe("sxt.describe_table with a key", () => {
     expect(r.warning).toContain("fail at the SXT prover");
     expect(r.warning).toContain("refuses this table before submission, so no credit is spent");
   });
+
+  it("warns that an unverified SXT table may fail and still use a credit", async () => {
+    fakeWorld({ community: [], tables: {}, provable: { "ETHEREUM.TOKEN_ERC20_TRANSFERS": [["BLOCK_NUMBER", BIGINT]] } });
+    const r = await describeTableHandler({ table: "ETHEREUM.TOKEN_ERC20_TRANSFERS" }, ctx);
+    expect(r.warning).toContain("has not been verified end to end");
+    expect(r.warning).not.toContain("refuses");
+  });
 });
 
 describe("sxt.run_proven_query guards (nothing submitted)", () => {
@@ -264,6 +271,15 @@ describe("sxt.run_proven_query guards (nothing submitted)", () => {
     expect(calls.submit).toBe(0);
   });
 
+  it("refuses the other SXT tables that fail at execution", async () => {
+    const calls = fakeWorld(world);
+    const err = await run("ETHEREUM.CONTRACTS", "SELECT CONTRACT_ADDRESS FROM ETHEREUM.CONTRACTS WHERE BLOCK_NUMBER = 22432845");
+    const s = sanitizeError(err);
+    expect(s.code).toBe("SQL_REJECTED");
+    expect(s.message).toContain("even with a narrow WHERE filter");
+    expect(calls.submit).toBe(0);
+  });
+
   it("proves a grouped aggregate and decodes the rows", async () => {
     const calls = fakeWorld(world);
     setProverDepsForTest({
@@ -282,6 +298,20 @@ describe("sxt.run_proven_query guards (nothing submitted)", () => {
       { AREA: 371000, N: 2 },
     ]);
     expect(calls.submit).toBe(1);
+  });
+});
+
+describe("withExactIntegers", () => {
+  it("keeps 64-bit verifier output exact, then restores JSON.parse", () => {
+    // Shape of ETHEREUM.NATIVE_WALLETS BALANCE (DECIMAL(75,0)) from a live proof.
+    const wasmJson = '[["BALANCE",{"Decimal75":[75,0,[[0,0,763,15653940354382969921]]]}]]';
+    const original = JSON.parse;
+    const result = withExactIntegers(() => JSON.parse(wasmJson));
+    expect(JSON.parse).toBe(original);
+    const out = toRows(result);
+    expect(out!.rows).toEqual([{ BALANCE: ((763n << 64n) | 15653940354382969921n).toString() }]);
+    // Without the wrapper the limb rounds and the row is refused rather than wrong.
+    expect(toRows(JSON.parse(wasmJson))).toBeNull();
   });
 });
 
@@ -335,8 +365,14 @@ describe("discovery and error helpers", () => {
 
   it("classifies an execution failure as non-retryable QUERY_FAILED", () => {
     const e = sanitizeError(
-      new UpstreamError("Prover", 'query q ended with status "failed": {"error":"Query execution failed 3 times"}'),
+      new UpstreamError(
+        "Prover",
+        'query q-9 ended with status "failed": {"error":"Query execution failed 3 times"}',
+        undefined,
+        "q-9",
+      ),
     );
-    expect(e).toMatchObject({ code: "QUERY_FAILED", retryable: false });
+    // The queryId survives sanitizing so a hosted caller can report it to SXT.
+    expect(e).toMatchObject({ code: "QUERY_FAILED", retryable: false, queryId: "q-9" });
   });
 });

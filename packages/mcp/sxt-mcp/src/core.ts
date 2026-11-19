@@ -168,9 +168,15 @@ export function buildMcpServer(tools: readonly ToolDef[], options: BuildServerOp
       };
     } catch (err) {
       const e = sanitizeError(err);
-      finish("error", { code: e.code, detail: e.detail });
+      finish("error", { code: e.code, detail: e.detail, ...(e.queryId ? { queryId: e.queryId } : {}) });
       const body: Record<string, unknown> = {
-        error: { code: e.code, message: e.message, retryable: e.retryable, requestId },
+        error: {
+          code: e.code,
+          message: e.message,
+          retryable: e.retryable,
+          requestId,
+          ...(e.queryId ? { queryId: e.queryId } : {}),
+        },
       };
       // Local callers own the credentials and the process, so they see full
       // upstream detail. Hosted callers get the request id; the detail is in

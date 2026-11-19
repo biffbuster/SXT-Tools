@@ -201,6 +201,8 @@ export class ProverClient {
       throw new UpstreamError(
         "Prover",
         `query ${queryId} ended with status "${status}": ${JSON.stringify(results).slice(0, 400)}`,
+        undefined,
+        queryId,
       );
     }
 
@@ -208,9 +210,14 @@ export class ProverClient {
     const verify = this.verifyOverride ?? (await loadVerifier());
     let result: unknown;
     try {
-      result = verify(results);
+      result = withExactIntegers(() => verify(results));
     } catch (err) {
-      throw new UpstreamError("Verifier", `local proof verification failed: ${err instanceof Error ? err.message : String(err)}`);
+      throw new UpstreamError(
+        "Verifier",
+        `local proof verification failed: ${err instanceof Error ? err.message : String(err)}`,
+        undefined,
+        queryId,
+      );
     }
     return { state: "verified", queryId, result, polls };
   }
@@ -290,6 +297,35 @@ export class ProverClient {
 function describe(err: Error): string {
   const cause = (err as { cause?: { code?: string; message?: string } }).cause;
   return cause?.code ? `${err.message} (${cause.code})` : err.message;
+}
+
+type Reviver = (this: unknown, key: string, value: unknown) => unknown;
+
+/**
+ * Runs `fn` with JSON.parse keeping integers above 2^53 exact, as their
+ * decimal source text. The SDK verifier builds its result as JSON inside WASM
+ * and hands it to the global JSON.parse (the `__wbg_parse` import in the
+ * glue), which rounds 64-bit DECIMAL limbs such as wei balances. `results.ts`
+ * accepts string limbs, so those values decode exactly instead of being
+ * dropped. Verification runs synchronously, so nothing else sees the swap.
+ * Without reviver source access (pre-2023 V8) values pass through unchanged
+ * and the decoder still refuses lossy limbs.
+ */
+export function withExactIntegers<T>(fn: () => T): T {
+  const original = JSON.parse;
+  JSON.parse = ((text: string, reviver?: Reviver) =>
+    original(text, function (this: unknown, key: string, value: unknown, context?: { source?: string }) {
+      const exact =
+        typeof value === "number" && Number.isInteger(value) && !Number.isSafeInteger(value) && context?.source
+          ? context.source
+          : value;
+      return reviver ? reviver.call(this, key, exact) : exact;
+    } as Reviver)) as typeof JSON.parse;
+  try {
+    return fn();
+  } finally {
+    JSON.parse = original;
+  }
 }
 
 let verifier: Verify | undefined;

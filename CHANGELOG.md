@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased (2026-11-19)
+
+### Fixed
+- Verified DECIMAL(75) values above 2^53 (wei balances, token amounts) were
+  rounded by the verifier's JSON hand-off, so their rows were dropped. They
+  now decode exactly (`withExactIntegers` in the MCP's `lib/prover.ts`).
+- Hosted sign-in from browsers: the consent page's `Referrer-Policy:
+  no-referrer` made the form post `Origin: null`, which the origin check
+  rejected.
+
+### Changed
+- SXT table coverage, from one live proof per table: `ETHEREUM.BLOCKS`,
+  `NATIVE_WALLETS` and `ERC173_OWNERSHIP_TRANSFERRED` prove and are listed.
+  Ten more SXT tables join `ETHEREUM.TRANSACTIONS` as refused before
+  submission (they fail at execution, even with a narrow WHERE). Five large
+  tables are marked unverified and three empty ones are noted.
+- `QUERY_FAILED` errors include the prover `queryId` on the hosted surface.
+- BLOCKS examples use blocks in the indexed range (from 22,432,845).
+
 ## Unreleased (2026-11-17)
 
 ### Added

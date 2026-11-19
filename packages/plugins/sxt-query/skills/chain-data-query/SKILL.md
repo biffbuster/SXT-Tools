@@ -5,9 +5,9 @@ description: Query SXT-indexed Ethereum chain data with a Proof of SQL receipt â
 
 # Chain Data Query
 
-## Status (2026-11-17)
+## Status (2026-11-19)
 
-`ETHEREUM.BLOCKS` proves end to end. `ETHEREUM.TRANSACTIONS` does not: its proofs fail at the prover ("Query execution failed 3 times") and have stalled the prover for every user, so `sxt chain-plan` and the MCP server refuse it. Until SXT fixes it, build on `ETHEREUM.BLOCKS` or on a community table (`sxt tables`). Ungrouped aggregates such as `COUNT(*) ... WHERE` also fail off-chain today; project rows instead, and pre-flight the exact SQL with `sxt verify --sql` before any on-chain spend.
+Three SXT tables prove end to end: `ETHEREUM.BLOCKS`, `ETHEREUM.NATIVE_WALLETS` and `ETHEREUM.ERC173_OWNERSHIP_TRANSFERRED`, with rows from about block 22,432,845 (May 2025). Eleven others plan but fail at the prover ("Query execution failed"), even with a narrow `WHERE`: `ETHEREUM.TRANSACTIONS`, `CONTRACTS`, and the token and NFT contract, approval, owner and transfer tables. `TRANSACTIONS` has also stalled the prover for every user. `sxt chain-plan` and the MCP server refuse all eleven. The examples below that use `ETHEREUM.TRANSACTIONS` show the intended pattern and will not prove until SXT fixes it; build on a table that proves or on a community table (`sxt tables`). Ungrouped aggregates such as `COUNT(*) ... WHERE` also fail off-chain today; project rows instead, and pre-flight the exact SQL with `sxt verify --sql` before any on-chain spend.
 
 ## What this skill does
 
@@ -178,7 +178,7 @@ Source table:       ETHEREUM.TRANSACTIONS at SXT chain state 0xba1f...
 
 ## References
 
-- Validated zk-committed surface (empirical, this repo's tests): only `ETHEREUM.BLOCKS` and `ETHEREUM.TRANSACTIONS` today.
+- Validated surface (one live proof per table, 2026-11-19): `ETHEREUM.BLOCKS`, `ETHEREUM.NATIVE_WALLETS` and `ETHEREUM.ERC173_OWNERSHIP_TRANSFERRED` prove; eleven tables fail at execution; five large tables are unverified and three `PROXY_*` tables are empty.
 - Authoritative SDK example listing the *intended* committed surface (forward-looking, not all live): https://github.com/spaceandtimefdn/sxt-proof-of-sql-sdk/blob/main/crates/sxt-proof-of-sql-sdk/examples/count-ethereum-core/main.rs
 - SXT docs on indexed ZK-proven chain data: https://docs.spaceandtime.io/docs/indexed-ethereum-data-zk-proven
 - Onchain query lifecycle reference: https://github.com/spaceandtimefdn/sxt-chain-examples/blob/main/tutorials/onchain_hello_world_query/README.md

@@ -132,4 +132,14 @@ describe("sxt.list_tables without a key", () => {
     const r = await listTablesHandler({ search: "transactions", limit: 50 }, keyless);
     expect(r.tables).toEqual([]);
   });
+
+  it("lists exactly the SXT tables verified end to end", async () => {
+    stubRpc({});
+    const r = await listTablesHandler({ search: "ethereum", limit: 50 }, keyless);
+    expect(r.tables.map((t) => t.table)).toEqual([
+      "ETHEREUM.BLOCKS",
+      "ETHEREUM.NATIVE_WALLETS",
+      "ETHEREUM.ERC173_OWNERSHIP_TRANSFERRED",
+    ]);
+  });
 });

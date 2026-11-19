@@ -166,7 +166,8 @@ Each rule below is enforced in code, not just documentation. The two smoke scrip
 | Agent verifies a publish with `COUNT(*)`              | Ungrouped aggregates refused; `verifyHint` emits a point lookup |
 | Agent submits SQL the prover cannot plan              | Free chain-RPC planner preflight refuses it with the reason, before submit |
 | Agent pulls a whole large table into one proof        | Tables of 50 MB or more refuse SQL with no WHERE or LIMIT |
-| Agent queries a table that breaks the shared prover   | `UNSTABLE_TABLES` (today `ETHEREUM.TRANSACTIONS`) refused before submit |
+| Agent queries a table that fails or breaks the shared prover | `UNSTABLE_TABLES` (today `ETHEREUM.TRANSACTIONS` and ten other SXT tables that fail at execution) refused before submit |
+| A proof fails at the prover                           | `QUERY_FAILED` carries the prover `queryId` in both modes, so the caller can report it to SXT |
 | Agent retries a query the prover failed to execute    | `QUERY_FAILED` is non-retryable and says retrying fails the same way |
 | Agent misreads DECIMAL limbs as numbers               | `rows` decodes DECIMAL to exact strings; raw `result` kept alongside |
 | Dropped status request fails a paid proof             | `prover.ts` retries free calls; submit is never retried |
@@ -286,7 +287,7 @@ Public mode refuses to start without `SXT_MCP_TOKEN_SECRET`, refuses a non-https
 | `SXT_MCP_MAX_WAIT_SECONDS`       | `120`   | Ceiling on the `waitSeconds` a caller may request. Longer proofs return a pending handle. |
 | `SXT_MCP_LARGE_TABLE_BYTES`      | 50 MB   | Tables at or above this size refuse SQL with neither WHERE nor LIMIT. |
 | `SXT_MCP_ALLOW_AGGREGATES`       | (unset) | `1` lifts the refusal of aggregates without GROUP BY, once the prover runs them again. |
-| `SXT_MCP_ALLOW_UNSTABLE_TABLES`  | (unset) | `1` lets queries reach tables listed as breaking the prover (today `ETHEREUM.TRANSACTIONS`). |
+| `SXT_MCP_ALLOW_UNSTABLE_TABLES`  | (unset) | `1` lets queries reach the tables in `UNSTABLE_TABLES` (today `ETHEREUM.TRANSACTIONS` and ten others that fail at execution). |
 | `PORT`                           | `3333`  | Honoured when `SXT_MCP_HTTP_PORT` is unset, for container platforms. |
 
 ---

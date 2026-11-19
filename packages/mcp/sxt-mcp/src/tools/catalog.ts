@@ -48,13 +48,12 @@ interface KnownTable {
 }
 
 /**
- * SXT-owned tables known to prove end to end. Discovery lists ~40 ETHEREUM.*
- * tables, but most have no commitments, so the SXT-owned part of the catalog
- * stays curated and each entry is checked live.
- *
- * ETHEREUM.TRANSACTIONS is left out on purpose: it plans, but proofs against
- * it fail at execution and took the prover's planner down for ~9 minutes on
- * 2026-11-10 and 2026-11-16. Restore it when SXT confirms a fix.
+ * SXT-owned tables verified end to end with a live proof. SXT's docs and the
+ * discovery API list 22 ETHEREUM.* tables and the planner accepts all 22, but
+ * on 2026-11-19 only these three executed (one LIMIT 1 proof per table via the
+ * hosted Worker). The rest are in FAILING_SXT_TABLES or UNVERIFIED_SXT_TABLES.
+ * The indexed rows start near block 22,432,845 (May 2025): earlier blocks
+ * verify but return no rows, so examples stay in that range.
  */
 const KNOWN_TABLES: readonly KnownTable[] = [
   {
@@ -62,8 +61,20 @@ const KNOWN_TABLES: readonly KnownTable[] = [
     description:
       "Ethereum mainnet blocks: number, hash, timestamp, gas, miner, state and transaction roots.",
     examples: [
-      "SELECT BLOCK_NUMBER, TRANSACTION_COUNT, SIZE FROM ETHEREUM.BLOCKS WHERE BLOCK_NUMBER = 20000000",
-      "SELECT BLOCK_NUMBER, TRANSACTION_COUNT FROM ETHEREUM.BLOCKS WHERE BLOCK_NUMBER >= 20000000 AND BLOCK_NUMBER < 20000010",
+      "SELECT BLOCK_NUMBER, TRANSACTION_COUNT, SIZE FROM ETHEREUM.BLOCKS WHERE BLOCK_NUMBER = 22432845",
+      "SELECT BLOCK_NUMBER, TRANSACTION_COUNT FROM ETHEREUM.BLOCKS WHERE BLOCK_NUMBER >= 22432845 AND BLOCK_NUMBER < 22432855",
+    ],
+  },
+  {
+    table: "ETHEREUM.NATIVE_WALLETS",
+    description: "Ethereum wallet ETH balances (wei, DECIMAL(75,0)) by block.",
+    examples: ["SELECT WALLET_ADDRESS, BALANCE FROM ETHEREUM.NATIVE_WALLETS WHERE BLOCK_NUMBER = 22434453"],
+  },
+  {
+    table: "ETHEREUM.ERC173_OWNERSHIP_TRANSFERRED",
+    description: "ERC-173 OwnershipTransferred events: contract, previous owner, new owner, block and transaction.",
+    examples: [
+      "SELECT CONTRACT_ADDRESS, PREVIOUS_OWNER, NEW_OWNER FROM ETHEREUM.ERC173_OWNERSHIP_TRANSFERRED WHERE BLOCK_NUMBER = 22432874",
     ],
   },
   {
@@ -75,12 +86,59 @@ const KNOWN_TABLES: readonly KnownTable[] = [
   },
 ];
 
+const WORKING_SXT = "Use ETHEREUM.BLOCKS, ETHEREUM.NATIVE_WALLETS, ETHEREUM.ERC173_OWNERSHIP_TRANSFERRED or a community table.";
+
+/**
+ * SXT-owned tables that plan but failed at execution on 2026-11-19 ("Query
+ * execution failed"), with LIMIT 1 and, for CONTRACTS, a single-block WHERE.
+ * Not size or column types: CONTRACTS has the same types as ERC173, which proves.
+ * The prover stayed healthy after each failure.
+ */
+const FAILING_SXT_TABLES = [
+  "CONTRACTS",
+  "TOKEN_ERC20_CONTRACTS",
+  "NFT_ERC721_CONTRACTS",
+  "NFT_ERC1155_CONTRACTS",
+  "NFT_ERC721_APPROVAL",
+  "NFT_ERC721_APPROVAL_FOR_ALL",
+  "NFT_ERC721_OWNERS",
+  "NFT_ERC1155_OWNERS",
+  "NFT_ERC721_TRANSFER",
+  "NFT_ERC1155_TRANSFER",
+].map((t) => `ETHEREUM.${t}`);
+
 /** Tables that plan but currently fail at the prover. run_proven_query refuses them before submitting. */
 export const UNSTABLE_TABLES: Readonly<Record<string, string>> = {
   "ETHEREUM.TRANSACTIONS":
     "Proofs against ETHEREUM.TRANSACTIONS currently fail at the SXT prover (\"Query execution failed\") " +
-    "and have briefly taken the prover offline for every user. Use ETHEREUM.BLOCKS or a community table.",
+    `and have briefly taken the prover offline for every user. ${WORKING_SXT}`,
+  ...Object.fromEntries(
+    FAILING_SXT_TABLES.map((t) => [
+      t,
+      `Proofs against ${t} currently fail at the SXT prover ("Query execution failed"), even with a ` +
+        `narrow WHERE filter (verified 2026-11-19). ${WORKING_SXT}`,
+    ]),
+  ),
 };
+
+/**
+ * SXT-owned tables not proven yet: five over 8 GB, held until SXT advises
+ * (the largest, TRANSACTIONS, is the one that stalled the prover), and three
+ * that are empty. run_proven_query allows them; describe_table warns.
+ */
+export const UNVERIFIED_TABLES: Readonly<Record<string, string>> = Object.fromEntries([
+  ...["TRANSACTION_DETAILS", "NATIVE_TOKEN_TRANSFERS", "TOKEN_ERC20_TRANSFERS", "TOKEN_ERC20_WALLET_BALANCES", "TOKEN_ERC20_APPROVAL"].map(
+    (t) => [
+      `ETHEREUM.${t}`,
+      `ETHEREUM.${t} has not been verified end to end: most SXT-owned tables fail at execution today, so a proof may ` +
+        `fail and still use a query credit. ${WORKING_SXT}`,
+    ],
+  ),
+  ...["PROXY_ERC1967_UPGRADES", "PROXY_ERC1967_ADMIN_CHANGES", "PROXY_NON_ERC_UPGRADES"].map((t) => [
+    `ETHEREUM.${t}`,
+    `ETHEREUM.${t} is empty (0 B in the catalog), so queries return no rows. ${WORKING_SXT}`,
+  ]),
+]);
 
 const TYPE_NAMES: Record<number, string> = {
   0: "BOOLEAN",
@@ -296,7 +354,9 @@ export async function describeTableHandler(args: z.infer<typeof describeTableSch
             `${UNSTABLE_TABLES[d.table]} sxt.run_proven_query refuses this table before submission, ` +
             "so no credit is spent and the prover is never called.",
         }
-      : {}),
+      : UNVERIFIED_TABLES[d.table]
+        ? { warning: UNVERIFIED_TABLES[d.table] }
+        : {}),
     exampleSql: exampleSql(d),
     notes: [
       "Use these exact column names (UPPERCASE) in sxt.run_proven_query.",
@@ -367,7 +427,9 @@ async function curated(needle: string | undefined) {
 const COMMON_NOTES = [
   "Call sxt.describe_table on a table before querying it: it confirms the table is provable and returns its columns.",
   "Tables you publish yourself appear here once indexed; describe_table works on them immediately.",
-  "ETHEREUM.TRANSACTIONS is not listed: proofs against it currently fail at the SXT prover.",
+  "SXT's own tables: ETHEREUM.BLOCKS, NATIVE_WALLETS and ERC173_OWNERSHIP_TRANSFERRED prove today and are listed. " +
+    "Eleven others, including ETHEREUM.TRANSACTIONS, fail at the SXT prover and are refused before submission " +
+    "(sxt.describe_table names them). The remaining eight are unverified or empty.",
 ];
 
 async function curatedOnly(needle: string | undefined, first: boolean, reason: string) {

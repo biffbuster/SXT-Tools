@@ -50,6 +50,8 @@ export class UpstreamError extends Error {
     readonly detail: string,
     /** Troubleshooting hint for local callers; not used for classification. */
     readonly hint?: string,
+    /** The prover queryId, when one exists. Safe to return: it names the caller's own query. */
+    readonly queryId?: string,
   ) {
     super(`${service} request failed: ${detail}${hint ? ` ${hint}` : ""}`);
     this.name = "UpstreamError";
@@ -64,7 +66,7 @@ const CANNED: Record<ErrorCode, string> = {
   SXT_KEY_INVALID: "SXT rejected the API key for this connection. Reconnect with a current key from app.spaceandtime.ai.",
   SXT_SUBSCRIPTION_REQUIRED: "The SXT account behind this API key has no active subscription. Activate one at app.spaceandtime.ai, then retry.",
   TABLE_NOT_PROVABLE: "The table is not in the prover's MAINNET catalog. Check the table reference, or confirm it was published without a PRIMARY KEY clause.",
-  QUERY_FAILED: "The prover accepted the query but could not execute it. Retrying the same SQL fails the same way. Narrow it with a WHERE filter or LIMIT, or rewrite it.",
+  QUERY_FAILED: "The prover accepted the query but could not execute it. Retrying the same SQL fails the same way. Narrow it with a WHERE filter or LIMIT, or rewrite it. Quote the queryId when reporting this to SXT.",
   RATE_LIMITED: "Too many requests for this connection. Wait a moment and retry.",
   UPSTREAM_TIMEOUT: "The SXT prover did not finish in time. Retry, or narrow the query.",
   UPSTREAM_ERROR: "The SXT prover returned an error for this query.",
@@ -84,6 +86,8 @@ export interface SanitizedError {
   retryable: boolean;
   /** Full upstream detail. Returned to stdio callers; logged (never returned) in hosted mode. */
   detail?: string;
+  /** Prover queryId of a failed proof, returned in both modes so it can be reported to SXT. */
+  queryId?: string;
 }
 
 function classifyUpstream(text: string): ErrorCode {
@@ -113,7 +117,13 @@ export function sanitizeError(err: unknown): SanitizedError {
   }
   if (err instanceof UpstreamError) {
     const code = classifyUpstream(err.detail);
-    return { code, message: CANNED[code], retryable: !!RETRYABLE[code], detail: err.message };
+    return {
+      code,
+      message: CANNED[code],
+      retryable: !!RETRYABLE[code],
+      detail: err.message,
+      ...(err.queryId ? { queryId: err.queryId } : {}),
+    };
   }
   const detail = err instanceof Error ? err.message : String(err);
   return { code: "INTERNAL", message: CANNED.INTERNAL, retryable: false, detail };

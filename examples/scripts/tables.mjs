@@ -28,9 +28,10 @@ const BASE = 'scope=PUBLIC&sourceNetwork=MAINNET';
 const IDENT = /^[A-Z][A-Z0-9_]{0,127}$/;
 const CONCURRENCY = 4;
 
-// SXT-owned tables known to prove. ETHEREUM.TRANSACTIONS is left out: proofs
-// against it fail at the prover today (see the MCP's UNSTABLE_TABLES).
-const CURATED = ['ETHEREUM.BLOCKS'];
+// SXT-owned tables verified end to end (2026-11-19). The other ETHEREUM.*
+// tables plan but fail at the prover or are unverified (see the MCP's
+// UNSTABLE_TABLES and UNVERIFIED_TABLES).
+const CURATED = ['ETHEREUM.BLOCKS', 'ETHEREUM.NATIVE_WALLETS', 'ETHEREUM.ERC173_OWNERSHIP_TRANSFERRED'];
 
 function parseArgs(argv) {
   const args = { search: null, schema: null, describe: null, json: false, help: false };

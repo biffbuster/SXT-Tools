@@ -52,14 +52,24 @@ const RPC = process.env.SXT_RPC_HTTP ?? 'https://rpc.mainnet.sxt.network';
 // table works. These only add a description for well-known tables.
 const TABLE_DESCRIPTIONS = {
   'ETHEREUM.BLOCKS': 'Ethereum mainnet block index (zk-verified).',
+  'ETHEREUM.NATIVE_WALLETS': 'Ethereum wallet ETH balances by block (zk-verified).',
+  'ETHEREUM.ERC173_OWNERSHIP_TRANSFERRED': 'ERC-173 ownership transfer events (zk-verified).',
 };
 
 // Tables that plan but whose proofs currently fail at the SXT prover. A
 // contract built on one would lock 100 SXT per query() until the 1-hour
 // timeout, so the plan is refused unless --force is passed.
+// Same list as the MCP's UNSTABLE_TABLES (packages/mcp/sxt-mcp/src/tools/catalog.ts).
 const UNSTABLE_TABLES = {
   'ETHEREUM.TRANSACTIONS':
     'proofs against it fail at the SXT prover ("Query execution failed", 2026-11-10 and 2026-11-16)',
+  ...Object.fromEntries(
+    ['CONTRACTS', 'TOKEN_ERC20_CONTRACTS', 'NFT_ERC721_CONTRACTS', 'NFT_ERC1155_CONTRACTS', 'NFT_ERC721_APPROVAL',
+      'NFT_ERC721_APPROVAL_FOR_ALL', 'NFT_ERC721_OWNERS', 'NFT_ERC1155_OWNERS', 'NFT_ERC721_TRANSFER', 'NFT_ERC1155_TRANSFER'].map((t) => [
+      `ETHEREUM.${t}`,
+      'proofs against it fail at the SXT prover ("Query execution failed"), even with a narrow WHERE filter (2026-11-19)',
+    ]),
+  ),
 };
 
 // The renderer (render-onchain-query.mjs) names the byte type BINARY; the
