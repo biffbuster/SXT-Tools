@@ -1,5 +1,46 @@
 # Changelog
 
+## Unreleased (2026-11-19)
+
+### Fixed
+- Verified DECIMAL(75) values above 2^53 (wei balances, token amounts) were
+  rounded by the verifier's JSON hand-off, so their rows were dropped. They
+  now decode exactly (`withExactIntegers` in the MCP's `lib/prover.ts`).
+- Hosted sign-in from browsers: the consent page's `Referrer-Policy:
+  no-referrer` made the form post `Origin: null`, which the origin check
+  rejected.
+
+### Changed
+- SXT table coverage, from one live proof per table: `ETHEREUM.BLOCKS`,
+  `NATIVE_WALLETS` and `ERC173_OWNERSHIP_TRANSFERRED` prove and are listed.
+  Ten more SXT tables join `ETHEREUM.TRANSACTIONS` as refused before
+  submission (they fail at execution, even with a narrow WHERE). Five large
+  tables are marked unverified and three empty ones are noted.
+- `QUERY_FAILED` errors include the prover `queryId` on the hosted surface.
+- BLOCKS examples use blocks in the indexed range (from 22,432,845).
+
+## Unreleased (2026-11-17)
+
+### Added
+- MCP `sxt.list_tables` lists every public community table via the
+  MakeInfinite discovery API, falling back to the curated list when the API
+  or the key is unavailable. `sxt.run_proven_query` works on any public
+  table, with a free planner preflight, a large-table guard and decoded rows.
+- CLI: `sxt tables`, `sxt verify --table/--sql`; `sxt chain-plan` reads
+  columns live and works on community tables.
+
+### Changed
+- **Plugins renamed** `dreamspace-data` → `sxt-data`, `dreamspace-query` →
+  `sxt-query`, `dreamspace-contracts` → `sxt-contracts`. Install IDs changed
+  (e.g. `sxt-data@sxt-tools`): uninstall the old plugins and install the new.
+- Only aggregates without GROUP BY are refused (grouped ones verified).
+- `ETHEREUM.TRANSACTIONS` is refused: its proofs fail at the prover.
+
+### Removed
+- `docs/BETA.md`, `docs/REVIEW.md`, `docs/docs-conformance.md` (stale
+  beta-era documents), the TRANSACTIONS-based `CollectionActivity` example,
+  and unused images in `public/`.
+
 ## Unreleased (post-beta.1 battle-test pass, 2026-06-11)
 
 ### Added

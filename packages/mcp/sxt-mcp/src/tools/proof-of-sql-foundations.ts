@@ -6,7 +6,7 @@
  * the server is alive even before any chain-touching tool is implemented.
  *
  * Returns the canonical SKILL.md content from
- * packages/plugins/dreamspace-query/skills/proof-of-sql-foundations/SKILL.md
+ * packages/plugins/sxt-query/skills/proof-of-sql-foundations/SKILL.md
  * so any agent calling sxt.run_proven_query can self-validate its SQL
  * against the proven surface before submitting.
  */
@@ -19,37 +19,53 @@ export const FOUNDATIONS_RESOURCE_URI = "sxt://docs/proof-of-sql-foundations";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
-// Resolve the SKILL.md relative to the compiled output. From dist/tools/ → repo root → packages/plugins/...
-const FOUNDATIONS_SKILL_PATH = resolve(
-  HERE,
-  "..",
-  "..",
-  "..",
-  "..",
-  "..",
-  "packages",
-  "plugins",
-  "dreamspace-query",
-  "skills",
-  "proof-of-sql-foundations",
-  "SKILL.md",
-);
+/**
+ * Resolution order matters for installed users.
+ *
+ * 1. `<package>/docs/` — written by `scripts/bundle-docs.mjs` at prebuild and
+ *    shipped in the npm tarball. This is the ONLY path that exists when the
+ *    server is installed via npx, so it must be tried first.
+ * 2. The monorepo source, five levels up from `dist/tools/`. Keeps `npm run dev`
+ *    serving live edits to the SKILL.md without a rebuild.
+ * 3. The fallback stub, which points at the canonical URL.
+ */
+const FOUNDATIONS_CANDIDATES = [
+  // dist/tools/ → dist/ → <package>/docs/
+  resolve(HERE, "..", "..", "docs", "proof-of-sql-foundations.md"),
+  resolve(
+    HERE,
+    "..",
+    "..",
+    "..",
+    "..",
+    "..",
+    "packages",
+    "plugins",
+    "sxt-query",
+    "skills",
+    "proof-of-sql-foundations",
+    "SKILL.md",
+  ),
+];
 
 const FALLBACK_BODY =
   "# Proof of SQL Foundations\n\n" +
   "Could not locate the canonical SKILL.md on this host. The published source of truth is at:\n" +
-  "https://github.com/biffbuster/sxt-tools/blob/main/packages/plugins/dreamspace-query/skills/proof-of-sql-foundations/SKILL.md\n";
+  "https://github.com/biffbuster/sxt-tools/blob/main/packages/plugins/sxt-query/skills/proof-of-sql-foundations/SKILL.md\n";
 
 export async function readFoundationsResource(): Promise<{
   uri: string;
   mimeType: "text/markdown";
   text: string;
 }> {
-  let text: string;
-  try {
-    text = await readFile(FOUNDATIONS_SKILL_PATH, "utf8");
-  } catch {
-    text = FALLBACK_BODY;
+  let text = FALLBACK_BODY;
+  for (const candidate of FOUNDATIONS_CANDIDATES) {
+    try {
+      text = await readFile(candidate, "utf8");
+      break;
+    } catch {
+      // Try the next candidate.
+    }
   }
   return {
     uri: FOUNDATIONS_RESOURCE_URI,

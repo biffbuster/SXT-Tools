@@ -71,13 +71,70 @@ export interface SelectNetworkArgs {
   action: string;
 }
 
+const PLACEHOLDER_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+/**
+ * Applies the documented `SXT_RPC` / `ETH_RPC` endpoint overrides.
+ *
+ * These are advertised in this file's header and in SAFETY.md but were never
+ * wired, so an operator pointing at a private node was silently ignored. The
+ * override replaces endpoints only. Contract addresses and the chain id still
+ * come from the selected network, and the mainnet gate is applied before this
+ * runs, so an override cannot be used to reach mainnet contracts.
+ */
+function applyEnvOverrides(base: NetworkSelection): NetworkSelection {
+  const sxtRpc = process.env.SXT_RPC;
+  const ethRpc = process.env.ETH_RPC;
+  if (!sxtRpc && !ethRpc) return base;
+
+  const next = { ...base };
+  if (sxtRpc) {
+    if (!/^wss?:\/\//i.test(sxtRpc)) {
+      throw new NetworkConfigError(`SXT_RPC must be a ws:// or wss:// URL, got "${sxtRpc}"`);
+    }
+    next.sxtRpc = sxtRpc;
+    next.sxtRpcHttp = sxtRpc.replace(/^ws/i, "http");
+  }
+  if (ethRpc) {
+    if (!/^https?:\/\//i.test(ethRpc)) {
+      throw new NetworkConfigError(`ETH_RPC must be an http:// or https:// URL, got "${ethRpc}"`);
+    }
+    next.evmRpc = ethRpc;
+  }
+  return next;
+}
+
+/**
+ * Guards the testnet placeholder addresses.
+ *
+ * Testnet QueryRouter / Verifier / SXT token addresses are not yet published by
+ * SXT, so they sit as zero addresses. Returning one to a caller produces a
+ * transaction to 0x0 that burns gas and fails obscurely. Fail loudly instead.
+ */
+export function requireContractAddress(
+  selection: NetworkSelection,
+  which: "queryRouter" | "verifier" | "sxtToken",
+): string {
+  const address = selection[which];
+  if (address === PLACEHOLDER_ADDRESS) {
+    throw new NetworkConfigError(
+      `The ${which} address is not published for ${selection.network} yet, so this operation ` +
+        `cannot run there. Use mainnet (mainnet: true plus SXT_MCP_ALLOW_MAINNET=I-UNDERSTAND), ` +
+        `where ${which} is a live contract`,
+    );
+  }
+  return address;
+}
+
 export function selectNetwork(args: SelectNetworkArgs): NetworkSelection {
   if (args.mainnet === true) {
     if (process.env.SXT_MCP_ALLOW_MAINNET !== "I-UNDERSTAND") {
       throw new MainnetGateError(args.action);
     }
-    if (args.evmChain === "ethereum") return MAINNET_ETHEREUM;
-    if (args.evmChain === "base" || args.evmChain === undefined) return MAINNET_BASE;
+    if (args.evmChain === "ethereum") return applyEnvOverrides(MAINNET_ETHEREUM);
+    if (args.evmChain === "base" || args.evmChain === undefined) {
+      return applyEnvOverrides(MAINNET_BASE);
+    }
     throw new NetworkConfigError(
       `evmChain "${args.evmChain}" is not a mainnet option (use "base" or "ethereum")`,
     );
@@ -89,5 +146,5 @@ export function selectNetwork(args: SelectNetworkArgs): NetworkSelection {
     );
   }
 
-  return TESTNET;
+  return applyEnvOverrides(TESTNET);
 }

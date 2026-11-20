@@ -13,6 +13,11 @@
  *   2. save-proof-plans.mjs    → writes proof plans (schema-aware SQL)
  *   3. verify-table.mjs        → this script; reads each plan's SQL, runs it
  *
+ * Any public table, no plans needed:
+ *   sxt verify --table PREFIX.TABLE            proves SELECT * ... LIMIT 5
+ *   sxt verify --sql "SELECT ... FROM ..."     proves exactly that SQL
+ * Find tables with `sxt tables`.
+ *
  * Env:
  *   SXT_API_KEY    Studio API key (app.spaceandtime.ai → API Authentication).
  *   SXT_PROVER     Default: https://api.makeinfinite.dev
@@ -37,14 +42,22 @@ const RPC    = process.env.SXT_RPC_HTTP ?? 'https://rpc.mainnet.sxt.network/';
 // Resolution order: env > .last-publish.json handoff > canonical demo.
 let handoff = readLastPublish();
 // An indexed-sci handoff (written by index-contract.mjs) is not consumable by
-// the CSV proof pipeline — SCI tables aren't zk-provable yet. Ignore it so
-// env vars / legacy defaults win instead of resolving to an unprovable table.
+// the CSV proof pipeline: it has no inferred-schema file and its address
+// columns are BINARY, which formatLiteral has not been proven against. Ignore
+// it so env vars / legacy defaults win.
 if (handoff?.kind === 'indexed-sci') handoff = null;
 const BASE_PLAN_DIR = join(HERE, '..', 'data', 'proof-plans');
 const HANDOFF_TABLE = handoff?.tableRef;
 const PLAN_DIR = process.env.SXT_PLAN_DIR
   ? resolvePath(process.env.SXT_PLAN_DIR)
   : (HANDOFF_TABLE ? planDirFor(HANDOFF_TABLE, BASE_PLAN_DIR) : BASE_PLAN_DIR);
+
+function flag(name) {
+  const i = process.argv.indexOf(name);
+  return i >= 0 ? process.argv[i + 1] : undefined;
+}
+const FLAG_SQL = flag('--sql');
+const FLAG_TABLE = (flag('--table') ?? FLAG_SQL?.match(/\bFROM\s+([A-Za-z][A-Za-z0-9_]*\.[A-Za-z][A-Za-z0-9_]*)/i)?.[1])?.toUpperCase();
 
 const apiKey = process.env.SXT_API_KEY;
 if (!apiKey) {
@@ -64,10 +77,13 @@ function loadPlan(name) {
   }
 }
 
-const countPlan    = loadPlan('count');
-const pointPlan    = loadPlan('point-lookup');
-const negativePlan = loadPlan('negative-lookup');
-const TABLE = process.env.SXT_TABLE
+// --table / --sql target an arbitrary table, so the active table's plans do not apply.
+const usePlans = !FLAG_TABLE && !FLAG_SQL;
+const countPlan    = usePlans ? loadPlan('count') : null;
+const pointPlan    = usePlans ? loadPlan('point-lookup') : null;
+const negativePlan = usePlans ? loadPlan('negative-lookup') : null;
+const TABLE = FLAG_TABLE
+  ?? process.env.SXT_TABLE
   ?? countPlan?.table
   ?? pointPlan?.table
   ?? HANDOFF_TABLE
@@ -105,10 +121,20 @@ console.log(`RPC:         ${RPC}`);
 console.log(`Table:       ${TABLE}`);
 console.log(`Plan dir:    ${PLAN_DIR}${countPlan || pointPlan || negativePlan ? '' : ' (no plans found — Q2/Q3 will be skipped)'}`);
 
-await provenQuery(
-  'Q1 — proven row count',
-  countPlan?.sql ?? `SELECT COUNT(*) AS ROWS_PUBLISHED FROM ${TABLE}`,
-);
+if (FLAG_SQL) {
+  const ok = await provenQuery('Proven query', FLAG_SQL);
+  process.exit(ok ? 0 : 1);
+}
+
+// An aggregate with no GROUP BY (the count plan) plans but fails at the
+// prover's execution step today (verified 2026-11-17), so Q1 proves a sample
+// of rows instead. `sxt upstream` reports when whole-table counts work again.
+const SAMPLE_SQL = `SELECT * FROM ${TABLE} LIMIT 5`;
+await provenQuery('Q1 — proven sample rows', SAMPLE_SQL);
+if (countPlan && !FLAG_TABLE) {
+  console.log(`  · ${join(PLAN_DIR, 'count.json')} skipped: whole-table COUNT(*) fails at the prover today.`);
+}
+if (FLAG_TABLE) process.exit(0);
 
 if (pointPlan) {
   await provenQuery('Q2 — proven point lookup', pointPlan.sql);

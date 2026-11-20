@@ -125,9 +125,9 @@ function printUsage() {
   console.error('');
   console.error('Required: PRIVATE_KEY env var (0x-prefixed, funded with SXT chain credits).');
   console.error('');
-  console.error('Note: SCI tables are NOT zk-provable yet — registration + ingestion only.');
-  console.error('For proofs that work today use the chain-data-query skill (ETHEREUM.BLOCKS /');
-  console.error('ETHEREUM.TRANSACTIONS).');
+  console.error('Note: SCI indexing is live-only (from the registration block forward).');
+  console.error('For proofs over the full history of a contract use the chain-data-query skill');
+  console.error('(pre-indexed ETHEREUM.* tables).');
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -594,7 +594,7 @@ async function main() {
     console.log(`     metadata: ${p.metadata}`);
   }
   console.log('');
-  console.log('  ⚠ SCI tables are NOT zk-provable yet — this registers ingestion only.');
+  console.log('  ⚠ Indexing is live-only: rows start at the registration block, no backfill.');
   console.log(`  ⚠ COST: the chain BURNS 20 SXT per created object — ${plan.length} table(s) = ${plan.length * 20} SXT,`);
   console.log(`    plus 20 SXT more if the namespace is new (sxt-node tables pallet CREATE_COST,`);
   console.log('    non-privileged accounts). FundsUnavailable means balance < the burn amount.');

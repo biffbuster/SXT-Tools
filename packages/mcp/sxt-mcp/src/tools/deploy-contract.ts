@@ -13,7 +13,7 @@
  */
 
 import { readFile, stat, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { basename, dirname, isAbsolute, resolve } from "node:path";
 import { z } from "zod";
 import { loadConfig } from "../lib/config.js";
 import { MissingCredentialError, NetworkConfigError } from "../lib/errors.js";
@@ -111,8 +111,9 @@ function deriveStatePath(artifactPath: string): string {
 }
 
 function deriveContractName(artifactPath: string): string {
-  const file = artifactPath.split("/").pop() ?? "Contract.json";
-  return file.replace(/\.json$/, "");
+  // basename, not split("/") — a Windows path never contains a forward slash,
+  // so the naive split returned the entire path as the "contract name".
+  return basename(artifactPath, ".json") || "Contract";
 }
 
 export async function deployContractHandler(args: DeployContractArgs) {

@@ -1,0 +1,29 @@
+// Cloudflare Workers deployment for the hosted (public-mode) MCP server.
+//   npm run build:worker            extract the SDK verifier WASM (worker-gen/)
+//   npx wrangler dev                run locally under workerd (reads .dev.vars)
+//   npx wrangler secret put SXT_MCP_TOKEN_SECRET
+//   npx wrangler deploy
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sxt-mcp",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // The SDK verifier, rebuilt so its WASM is an imported module (Workers do
+  // not compile WebAssembly from bytes at runtime).
+  "alias": { "sxt-proof-of-sql-sdk": "./worker-gen/sxt-verifier.mjs" },
+  "rules": [
+    { "type": "Text", "globs": ["**/*.md"], "fallthrough": true },
+    { "type": "CompiledWasm", "globs": ["**/*.wasm"], "fallthrough": true }
+  ],
+  "observability": { "enabled": true },
+  // Per-caller tool-call limit (key = hash of the caller's SXT key). Matches
+  // SXT_MCP_RATE_LIMIT_PER_MIN's default of 60 per minute.
+  "ratelimits": [
+    { "name": "TOOL_LIMITER", "namespace_id": "1001", "simple": { "limit": 60, "period": 60 } }
+  ],
+  "vars": {
+    "SXT_MCP_LOG_FORMAT": "json"
+    // SXT_MCP_PUBLIC_URL is set per environment, e.g. https://mcp.example.com
+  }
+}

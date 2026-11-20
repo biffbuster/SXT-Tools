@@ -1,51 +1,25 @@
 /**
- * Shared MCP server factory. Both `index.ts` (stdio) and `http.ts` (Streamable
- * HTTP) call `buildServer()` to construct an identically-wired `Server`
- * instance — same tool registry, same schemas, same handlers.
+ * Full tool set for the stdio entrypoint (index.ts): the read-only catalog
+ * plus the write tools (publish, audit, deploy), which need a private key or
+ * the local filesystem.
  *
- * The `allowedTools` filter exists so transports can expose narrower surfaces.
- * stdio (Claude Code / build-from-source) sees all four tools. HTTP (ChatGPT
- * connector) sees ONLY `sxt.run_proven_query` — the read-only proof-query
- * path that needs no private key. See `project_mcp_transport_split` memory.
+ * HTTP entrypoints do not import this file. They build from core.ts with the
+ * read-only catalog only (tools/catalog-read.ts), so the write tools and
+ * their dependencies are never loaded on a network-exposed server.
  */
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import {
-  CallToolRequestSchema,
-  ListResourcesRequestSchema,
-  ListToolsRequestSchema,
-  ReadResourceRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
-import { zodToJsonSchema } from "zod-to-json-schema";
+import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 
-import {
-  publishDatasetSchema,
-  publishDatasetHandler,
-} from "./tools/publish-dataset.js";
-import {
-  runProvenQuerySchema,
-  runProvenQueryHandler,
-} from "./tools/run-proven-query.js";
-import {
-  auditContractSchema,
-  auditContractHandler,
-} from "./tools/audit-contract.js";
-import {
-  deployContractSchema,
-  deployContractHandler,
-} from "./tools/deploy-contract.js";
-import {
-  FOUNDATIONS_RESOURCE_URI,
-  readFoundationsResource,
-} from "./tools/proof-of-sql-foundations.js";
-import { logger } from "./lib/logger.js";
+import { buildMcpServer, VERSION, type BuildServerOptions, type ToolDef } from "./core.js";
+import { READ_ONLY_TOOLS, READ_ONLY_TOOL_NAMES } from "./tools/catalog-read.js";
+import { publishDatasetSchema, publishDatasetHandler } from "./tools/publish-dataset.js";
+import { auditContractSchema, auditContractHandler } from "./tools/audit-contract.js";
+import { deployContractSchema, deployContractHandler } from "./tools/deploy-contract.js";
+import { readFoundationsResource } from "./tools/proof-of-sql-foundations.js";
 
-export const VERSION = "0.1.0";
+export { VERSION };
 
-// MCP behavioural hints. ChatGPT enforces these when deciding whether to ask
-// the user to confirm a tool call; Claude treats them as advisory. Spec:
-// https://modelcontextprotocol.io/specification/server/tools#annotations
-const ALL_TOOLS = [
+const WRITE_TOOLS = [
   {
     name: "sxt.publish_dataset",
     description:
@@ -61,22 +35,6 @@ const ALL_TOOLS = [
       destructiveHint: false,
       openWorldHint: true,
       idempotentHint: false,
-    },
-  },
-  {
-    name: "sxt.run_proven_query",
-    description:
-      "Run a SELECT against a published SXT table with proveExecution=true and return " +
-      "the proof receipt. Off-chain via /v1/zkquery — no SXT or ETH spend, just an API quota tick. " +
-      "Requires SXT_API_KEY in the host config.",
-    schema: runProvenQuerySchema,
-    handler: runProvenQueryHandler,
-    annotations: {
-      title: "Run a proof-of-SQL query",
-      readOnlyHint: true,
-      destructiveHint: false,
-      openWorldHint: true,
-      idempotentHint: true,
     },
   },
   {
@@ -113,90 +71,22 @@ const ALL_TOOLS = [
       idempotentHint: true,
     },
   },
-] as const;
+] as const satisfies readonly ToolDef[];
+
+const ALL_TOOLS = [...READ_ONLY_TOOLS, ...WRITE_TOOLS];
 
 export type ToolName = (typeof ALL_TOOLS)[number]["name"];
 
-export interface BuildServerOptions {
-  /** Restrict registered tools to this allowlist. Default: all tools. */
-  allowedTools?: readonly ToolName[];
-}
-
-export function buildServer(options: BuildServerOptions = {}): Server {
+export function buildServer(
+  options: Omit<BuildServerOptions, "readFoundations"> & { allowedTools?: readonly string[] } = {},
+): Server {
   const tools = options.allowedTools
     ? ALL_TOOLS.filter((t) => options.allowedTools!.includes(t.name))
     : ALL_TOOLS;
-
-  const server = new Server(
-    { name: "@biffbuster/sxt-mcp", version: VERSION },
-    { capabilities: { tools: {}, resources: {} } },
-  );
-
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: tools.map((t) => ({
-      name: t.name,
-      description: t.description,
-      inputSchema: zodToJsonSchema(t.schema),
-      annotations: t.annotations,
-    })),
-  }));
-
-  server.setRequestHandler(CallToolRequestSchema, async (req) => {
-    const { name, arguments: args } = req.params;
-    const tool = tools.find((t) => t.name === name);
-    if (!tool) {
-      // Includes the case where a transport-allowed tool name doesn't match
-      // any tool, and the case where a hidden tool is invoked over a narrowed
-      // transport (HTTP).
-      return {
-        isError: true,
-        content: [{ type: "text", text: `Unknown tool: ${name}` }],
-      };
-    }
-
-    logger.debug(`${name} called`);
-    logger.trace(`${name} args: ${JSON.stringify(args ?? {})}`);
-
-    try {
-      const parsed = tool.schema.parse(args ?? {});
-      const result = await (tool.handler as (a: unknown) => Promise<unknown>)(parsed);
-      return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-      };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return {
-        isError: true,
-        content: [{ type: "text", text: message }],
-      };
-    }
-  });
-
-  server.setRequestHandler(ListResourcesRequestSchema, async () => ({
-    resources: [
-      {
-        uri: FOUNDATIONS_RESOURCE_URI,
-        name: "Proof of SQL foundations",
-        description:
-          "The proven SQL surface — operators that compile to a HyperKZG proof and operators " +
-          "that don't. Read this before drafting SQL for sxt.run_proven_query.",
-        mimeType: "text/markdown",
-      },
-    ],
-  }));
-
-  server.setRequestHandler(ReadResourceRequestSchema, async (req) => {
-    if (req.params.uri !== FOUNDATIONS_RESOURCE_URI) {
-      throw new Error(`Unknown resource URI: ${req.params.uri}`);
-    }
-    const resource = await readFoundationsResource();
-    return { contents: [resource] };
-  });
-
-  return server;
+  return buildMcpServer(tools, { ...options, readFoundations: readFoundationsResource });
 }
 
 export const TOOL_COUNT = ALL_TOOLS.length;
 
-/** Read-only allowlist for the HTTP (ChatGPT) transport. */
-export const HTTP_READ_ONLY_TOOLS = ["sxt.run_proven_query"] as const satisfies readonly ToolName[];
+/** Names of the tools any HTTP surface exposes. Defined by tools/catalog-read.ts. */
+export const HTTP_READ_ONLY_TOOLS = READ_ONLY_TOOL_NAMES;

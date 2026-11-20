@@ -1,0 +1,294 @@
+---
+name: run-proven-query
+description: >-
+  Translate a user's natural-language question about a published Space and Time
+  table into a Proof of SQL query, execute it via the SXT REST API with
+  proveExecution=true, and surface the proof receipt for onchain verification.
+  Use when the user has already published a table (or knows the table reference)
+  and asks to verify, prove, query with proof, check membership, or run a SELECT
+  against it. Pairs with proof-of-sql-foundations (the surface guardrail) and
+  dataset-publish (which produces the table this skill queries).
+---
+
+# Run Proven Query
+
+## Under maintenance
+
+This skill depends on the off-chain Proof of SQL prover and is temporarily unavailable.
+
+## What this skill does
+
+Takes a published SXT table reference plus a user goal in natural language, and:
+
+1. **Discovers the table schema** — column names, types — by inspecting the user's local `schema.json` or the publish output.
+2. **Translates the goal into provable SQL** — using only the surface defined in `sxt-query:proof-of-sql-foundations`. Refuses or rewrites if the goal can't be expressed in proven mode.
+3. **Submits the query** to the SXT zkQuery REST API (`/v1/zkquery` family) using a JWT obtained by exchanging the user's `SXT_API_KEY`, then polls for the proof and fetches the result.
+4. **Surfaces the proof receipt** alongside the result, with the addresses of the SxT Onchain Verifier so the user can validate the receipt onchain.
+
+This is the **bridge** between the publish loop (`dataset-publish` writes the table) and the audit loop (`pre-deploy-audit` consumes proven results). Without this skill, an agent would know *how to make a query provable* (foundations) and *how to publish* (publish), but not how to actually run a verified query end-to-end against a user's specific dataset.
+
+## When to invoke
+
+- The user mentions a table reference like `MY_AUDIT_<ADDR>.STAKERS` and asks to query, prove, verify, or check membership in it.
+- The user just published a dataset via `dataset-publish` and asks "now what" / "how do I prove rows are in it?" / "can a smart contract use this?".
+- The user wants to write a custom verify script for their dataset — this skill produces the canonical script shape.
+- A downstream skill (e.g., a custom audit workflow) needs to surface verifiable evidence from the user's tables.
+
+Do **not** invoke this skill when the user's question can't be expressed in the proven SQL surface. In that case, defer to `proof-of-sql-foundations` to refuse or rewrite the request first.
+
+## Canonical demo table (zero-setup path)
+
+For the seamless "is wallet X a staker?" demo arc, an already-published mainnet table is available — no `dataset-publish` step required.
+
+| Field | Value |
+|---|---|
+| Table reference | `MY_AUDIT_V2_5731EC0BBEB5F7BCAA2E4BAF3179A7A4C59C2552.STAKERS` |
+| Schema | `STAKER VARCHAR NOT NULL` (single column) |
+| Row count | ~2,062 (verifiable via `SELECT COUNT(*) AS N FROM <table>`) |
+| Known-present staker | `0x6de6e901bbefd26a9888798a25e4a49309d04ca9` |
+| Known-absent staker | `0x0000000000000000000000000000000000000000` |
+
+Use this table when:
+
+- The user asks about a wallet without pointing at their own table.
+- The user is exploring what Proof of SQL can do and wants a working example.
+- The agent needs a baseline proof receipt before walking through a custom publish flow.
+
+The schema is known up front, so Step 1 of the execution recipe (schema discovery) is skipped. Go straight to Step 2.
+
+## Quick path for chat demos
+
+For the wallet-membership pattern against the canonical demo table, an agent has every fact it needs in this skill — no clarifying questions, no schema lookup.
+
+1. Confirm `SXT_API_KEY` is set in the user's environment. If not, ask them to add it to `.env` — don't accept a key in chat.
+2. Generate the membership query:
+   ```sql
+   SELECT STAKER
+   FROM MY_AUDIT_V2_5731EC0BBEB5F7BCAA2E4BAF3179A7A4C59C2552.STAKERS
+   WHERE STAKER = '<address-from-user>'
+   ```
+3. Execute via Step 3's recipe (JWT exchange → submit → poll → fetch). Surface the result + proof receipt per Step 4.
+
+One round trip on the user side, three API calls behind the scenes. Result rows + the HyperKZG proof bytes + the on-chain verifier addresses, all in one structured response. This is the demo arc.
+
+## Inputs
+
+Required:
+
+- **User goal in plain English** — what they want to prove, e.g., "is wallet X in the table", "how many rows", "sum of amounts where status = active".
+- **`SXT_API_KEY`** in env — REST API key, separate from the publish wallet's private key. Get from chain.spaceandtime.io → Account → API keys.
+
+Conditionally required:
+
+- **Table reference**: full `<NAMESPACE>.<TABLE>` as it landed onchain — usually the form `MY_PROJECT_<UPPERCASE_HEX_ADDRESS>.MY_TABLE`. **Auto-picked up** from `examples/data/.last-publish.json` if the user just ran `dataset-publish` in the same local clone (per-user, gitignored). Otherwise: get it from `dataset-publish` output, the chain.spaceandtime.io UI under "My Tables", or `commitments.commitmentStorageMap`.
+
+Optional:
+
+- **`schema.json`** — if the user has the local schema file from publishing, use it instead of an API discovery call (saves a round trip). The handoff file points at this path automatically.
+- **`SXT_LOOKUP_COLUMN`** — overrides which column membership / point-lookup queries filter on. Defaults to whatever the user pinned at publish time (`--lookup-column`), else the first VARCHAR in the schema.
+- **`SXT_API_BASE`** — defaults to `https://api.makeinfinite.dev`. Override if SXT moves the endpoint.
+
+### Auto-pickup from a recent publish
+
+The `dataset-publish` skill writes `examples/data/.last-publish.json` after a successful publish. The bundled CLI scripts (`save-proof-plans.mjs`, `verify-table.mjs`) read that file as a fallback for `SXT_TABLE` / `SXT_SCHEMA_PATH` / `SXT_LOOKUP_COLUMN`. The flow forked users see:
+
+1. Drop CSV → run `dataset-publish` → handoff file written
+2. Run this skill (or any downstream skill) → no need to retype table ref, schema path, or lookup column
+
+Resolution order: explicit env / arg → `.last-publish.json` → legacy canonical demo defaults. The handoff is per-local-clone — it contains the publisher's wallet hex and is gitignored, so each forked user's chain is isolated.
+
+## Concrete execution recipe
+
+### Step 1 — Establish the table schema
+
+Without the schema, you can't translate the goal into valid SQL. Resolution order:
+
+1. **`examples/data/.last-publish.json` handoff** — written by `dataset-publish` and points at the inferred schema path + recorded `lookupColumn`. Read it first; this is the zero-friction path for forked users.
+2. **Local `schema.json`** — if the handoff is absent but the user has a hand-curated schema file from a prior publish, read it directly.
+3. **Ask the user** — if neither exists, ask the user to paste the schema or the publish output that includes the column list. The proven-query REST endpoint expects a fully-formed SQL string and won't help with discovery.
+
+If the table is in the dreamspace.xyz Studio under the user's account, the user can also see column names and types in the Studio table browser.
+
+### Step 2 — Translate the goal into provable SQL
+
+Walk the user's goal against the proven surface from `proof-of-sql-foundations`:
+
+| User goal pattern | Provable SQL shape |
+|---|---|
+| "Is X in the table?" | `SELECT <col> FROM <t> WHERE <col> = '<x>'` (membership; `<col>` is whichever column the publish step pinned via `--lookup-column`, default first VARCHAR) |
+| "How many rows?" | `SELECT COUNT(*) AS N FROM <t>` (cardinality) |
+| "How many match condition Y?" | `SELECT COUNT(*) AS N FROM <t> WHERE <y>` (filtered count) |
+| "Sum / total of column Z (for rows matching Y)?" | `SELECT SUM(<z>) AS TOTAL FROM <t> [WHERE <y>]` |
+| "What rows match condition Y?" | `SELECT <cols> FROM <t> WHERE <y>` (point or range) |
+| "Group rows by column G and count" | `SELECT <g>, COUNT(*) AS N FROM <t> GROUP BY <g>` (one GROUP BY column) |
+| "First N rows (paginated read, unsorted)" | `SELECT <cols> FROM <t> [WHERE <y>] LIMIT <n> [OFFSET <m>]` |
+
+**Refuse and offer rewrite for any goal that needs:**
+
+- **JOINs**: not provable on the current SXT Proof of SQL surface. Counter-offer: query each table separately, join in application code (or in the Solidity callback if both proofs land on-chain).
+- **Sorted Top-N**: `ORDER BY` is not provable, so true "top N by value" isn't possible inside a proof. `LIMIT` *alone* IS provable, so paginated reads work — but the rows come back in whatever order the engine produces. Counter-offer: pull the full filtered set (within the 10k row cap), sort client-side.
+- **Averages, mins, maxes**: `AVG`/`MIN`/`MAX` not provable. Counter-offer: return `SUM` + `COUNT` (compute average client-side) or full filtered set within the 10k row cap.
+- **Distinct counts**: `DISTINCT` not provable. Counter-offer: ask the user if they can pre-deduplicate at publish time, or run unproven if exploratory.
+- **Subqueries / CTEs / window functions / `UNION` / `HAVING` / division**: not on the proven surface. Counter-offer: split into multiple proven queries that compose client-side.
+- **Cross-chain joins**: not provable. Counter-offer: query each chain's table separately, join in application code.
+
+Authoritative surface reference: https://docs.spaceandtime.io/docs/posql-sql-syntax-supported-operations
+
+### Step 3 — Execute via REST API with proof
+
+The endpoint is `/v1/zkquery` on `api.makeinfinite.dev`. **The API key is NOT a Bearer token** — first exchange it for a 25-minute JWT at `/auth/apikey`, then use the JWT as Bearer for everything else. The submission returns a `queryId`; poll status until `done`, then fetch the proven result.
+
+```javascript
+// 1) Exchange API key → JWT (25-min access token).
+const auth = await fetch('https://proxy.api.makeinfinite.dev/auth/apikey', {
+  method: 'POST',
+  headers: { apikey: process.env.SXT_API_KEY, 'content-type': 'application/json' },
+});
+const { accessToken } = await auth.json();
+
+// 2) Get the best attested SXT chain block hash (binds proof to chain state).
+const att = await fetch('https://rpc.mainnet.sxt.network/', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({
+    id: 1, jsonrpc: '2.0',
+    method: 'attestation_v1_bestRecentAttestations', params: null,
+  }),
+});
+const blockHash = (await att.json()).result.attestationsFor;
+
+// 3) Submit. sourceNetwork MUST be the literal string "MAINNET"
+//    (uppercase, case-sensitive — the only accepted enum value, even for
+//    user-published Community-tier tables).
+const submit = await fetch('https://api.makeinfinite.dev/v1/zkquery', {
+  method: 'POST',
+  headers: {
+    authorization: `Bearer ${accessToken}`,
+    accept: 'application/json',
+    'content-type': 'application/json',
+  },
+  body: JSON.stringify({
+    sqlText,
+    sourceNetwork: 'MAINNET',
+    commitmentScheme: 'HYPER_KZG',
+    blockHash,
+    timeout: null,
+  }),
+});
+const { queryId } = await submit.json();   // 202 Accepted on success
+
+// 4) Poll status (typical: 1–3 polls; cap at ~30 to avoid runaway).
+let status;
+for (let i = 0; i < 30; i++) {
+  const r = await fetch(`https://api.makeinfinite.dev/v1/zkquery/${queryId}/status`, {
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  ({ status } = await r.json());
+  if (status === 'done' || status === 'failed' || status === 'canceled') break;
+  await new Promise(r => setTimeout(r, 1000));
+}
+if (status !== 'done') throw new Error(`zkQuery did not complete: ${status}`);
+
+// 5) Fetch results + proof.
+const r = await fetch(`https://api.makeinfinite.dev/v1/zkquery/${queryId}/results`, {
+  headers: { authorization: `Bearer ${accessToken}` },
+});
+const { success, results, proof, commitments } = await r.json();
+```
+
+Response field reference:
+
+| Field | Meaning |
+|---|---|
+| `success` | `true` if the prover finished and the proof verifies. |
+| `results` | Hex-encoded result rows (same encoding the on-chain executor delivers). |
+| `proof` | Hex-encoded HyperKZG proof bytes. Verifiable in WASM via `sxt-proof-of-sql-sdk` or onchain via the verifier addresses below. |
+| `commitments` | Table commitment + merkle proof tying the result to chain state at `blockHash`. |
+| `error` | Set when `success: false` — surface verbatim to the user. |
+
+**Common 4xx bodies and what they mean:**
+
+| Status | `detail` substring | Cause |
+|---|---|---|
+| 401 | `Invalid JWT` | You sent the raw `SXT_API_KEY` as Bearer, or your JWT expired (25-min lifetime). Re-run step 1. |
+| 422 | `does not exist in source network MAINNET` | The table didn't get promoted into the dreamspace MAINNET catalog. Most often caused by a `PRIMARY KEY` clause in the original `CREATE TABLE` — see `sxt-data:dataset-publish`. |
+| 400 | `source network 'X' is not supported` | You passed something other than the literal `"MAINNET"`. There is no other accepted enum value, even for user-published Community-tier tables. |
+| 422 | other | Surface the body verbatim — the prover names the offending field. |
+
+If you see the 422 "does not exist in source network MAINNET" error against a table you know was published successfully, run the off-chain pre-flight in `examples/scripts/verify-table.mjs` for a clean reproduction; the resolution is almost always to republish the table without a PRIMARY KEY clause in the DDL.
+
+### Step 4 — Present the result + receipt
+
+Format the response as a structured block, not a prose sentence:
+
+```markdown
+## Query result
+
+SQL:    SELECT COUNT(*) AS N FROM MY_AUDIT_<ADDR>.STAKERS
+Rows:   1
+Result: { N: 2062 }
+
+## Proof of execution
+
+Receipt:    0x4f3a...8b21 (1,247 bytes)
+Issued by:  https://api.makeinfinite.dev (Space and Time mainnet)
+Verifiable: locally in ~7ms via the SxT SDK,
+            or onchain in ~150K gas via:
+              Ethereum: 0x55780Ba21EdFBbFEb7033a0F2FC5Cf55Cd62ACf9
+              Base:     0x13b7463a07Aac6Bd483E4329a7F6768Da1A65518
+              QueryRouter: 0x220a7036a815a1Bd4A7998fb2BCE608581fA2DbB
+```
+
+Always print the proof bytes (or a clear "no proof returned" warning with the response keys). The proof is the *whole point* of the `/v1/zkquery` flow — without it the query is no different from any unverified analytics call.
+
+## When to refuse
+
+- **No `SXT_API_KEY` in env**: don't accept a key in chat. Ask the user to add it to their `.env` file.
+- **Goal can't be expressed in proven SQL**: refuse, cite the rule from `proof-of-sql-foundations`, offer the rewrite or unproven fallback. Don't silently strip the unprovable clause and submit anyway.
+- **Result set would exceed 10,000 rows**: SXT caps proven results at 10k. Add a tighter `WHERE` to bound the set, or fall back to unproven.
+- **User asks for proof against a table they haven't confirmed exists**: run a discovery query first or have them confirm via chain.spaceandtime.io UI. A "proven" query against a non-existent table just returns an error; don't waste the user's time.
+
+## Worked example end-to-end
+
+User: *"I just published `MY_AUDIT_5731EC...2552.STAKERS`. Prove that wallet `0x6de6e9...` is in there and that the table has 2062 rows total."*
+
+Agent response:
+
+```
+Two proven queries coming up. Both stay inside the Proof of SQL surface
+(membership lookup + COUNT). Submitting via api.makeinfinite.dev with
+proveExecution: true.
+
+Query 1 (membership):
+  SELECT STAKER FROM MY_AUDIT_5731EC...2552.STAKERS
+  WHERE STAKER = '0x6de6e901bbefd26a9888798a25e4a49309d04ca9'
+
+Query 2 (cardinality):
+  SELECT COUNT(*) AS N FROM MY_AUDIT_5731EC...2552.STAKERS
+```
+
+Then run both, surface the rows + receipt for each, and hand the user the verifier addresses so they can validate either receipt onchain. If the user wants this as a reusable script, write `verify-<table>.mjs` next to their CSV with the same structure as `examples/scripts/verify-table.mjs` in this repo.
+
+## What this skill is not
+
+- **Not a SQL engine.** It generates SQL and forwards to SXT — it doesn't execute or optimize anything itself.
+- **Not a proof verifier.** It surfaces the receipt; the user (or their smart contract) verifies it via the SDK or onchain verifier addresses.
+- **Not a data discovery tool.** It assumes the user knows their table reference. For browse-the-tables workflows, use the chain.spaceandtime.io UI.
+
+## Pairs with
+
+- `sxt-query:proof-of-sql-foundations` — the constraint layer; this skill defers to it for surface decisions.
+- `sxt-data:dataset-publish` — produces the table this skill queries.
+- `sxt-contracts:pre-deploy-audit` — calls this skill (or its pattern) to cross-reference contracts against published reference tables.
+
+## References
+
+- SXT REST API root: `https://api.makeinfinite.dev` — the SDK appends `/v1/zkquery` (submit), `/v1/zkquery/{id}/status` (poll), `/v1/zkquery/{id}/results` (fetch).
+- Auth exchange endpoint: `https://proxy.api.makeinfinite.dev/auth/apikey` — POST with header `apikey: <your key>`. Returns 25-min access token + 30-min refresh token.
+- Proven SQL surface and refusal rules: see `sxt-query:proof-of-sql-foundations`.
+- Onchain verifier addresses (re-verify before deployment): https://docs.spaceandtime.io/docs/what-is-space-and-time-quick-intro
+  - Ethereum mainnet: `0x55780Ba21EdFBbFEb7033a0F2FC5Cf55Cd62ACf9`
+  - Base mainnet: `0x13b7463a07Aac6Bd483E4329a7F6768Da1A65518`
+  - QueryRouter (both networks): `0x220a7036a815a1Bd4A7998fb2BCE608581fA2DbB`
+- Worked-out script: `examples/scripts/verify-table.mjs` in this repo — copy and adapt the queries for any table. Set `SXT_TABLE` and `SAMPLE_STAKER` env vars to point at your own data.
+- Reference SDK source: `node_modules/sxt-proof-of-sql-sdk/index_tail.js` (in `examples/scripts/`) — the `queryAndVerify` method is the SDK's canonical implementation of the same flow this skill documents.

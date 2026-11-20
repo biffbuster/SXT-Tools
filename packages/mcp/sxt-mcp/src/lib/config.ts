@@ -29,6 +29,23 @@ export interface HttpConfig {
    * bearer is the v1 protection layer for read-only deployments.
    */
   bearer: string | undefined;
+  /**
+   * Public mode. When SXT_MCP_PUBLIC_URL is set (e.g. https://mcp.example.com),
+   * the server runs as a hosted, multi-user connector: OAuth 2.1 with
+   * bring-your-own SXT API key, no operator credentials used for callers.
+   * Unset means local mode (the behaviour above).
+   */
+  publicUrl: URL | undefined;
+  /** SXT_MCP_TOKEN_SECRET: seals every token issued in public mode. >= 32 chars. */
+  tokenSecret: string | undefined;
+  /** SXT_MCP_TOKEN_SECRET_PREVIOUS: still opens tokens during a secret rotation. */
+  tokenSecretPrevious: string | undefined;
+  /** SXT_MCP_RATE_LIMIT_PER_MIN: tool calls per caller per minute (per instance). Default 60. */
+  rateLimitPerMin: number;
+  /** SXT_MCP_ALLOW_KEY_HEADER: accept `X-SXT-API-Key` for headless agents. Default on; "0" disables. */
+  allowKeyHeader: boolean;
+  /** SXT_MCP_TRUST_PROXY: hop count of trusted reverse proxies, for client IPs. Default 1 in public mode. */
+  trustProxy: number;
 }
 
 export interface RuntimeConfig {
@@ -47,7 +64,8 @@ export interface RuntimeConfig {
 }
 
 function loadHttpConfig(): HttpConfig {
-  const portRaw = process.env.SXT_MCP_HTTP_PORT;
+  // PORT is what most container platforms (Cloud Run, Fly, Render) inject.
+  const portRaw = process.env.SXT_MCP_HTTP_PORT ?? process.env.PORT;
   const port = portRaw ? Number(portRaw) : 3333;
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error(`SXT_MCP_HTTP_PORT must be 1..65535, got: ${portRaw}`);
@@ -60,7 +78,41 @@ function loadHttpConfig(): HttpConfig {
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
   const bearer = process.env.SXT_MCP_HTTP_BEARER || undefined;
-  return { port, bindHost, bindExplicit, allowedOrigins, bearer };
+
+  const publicRaw = process.env.SXT_MCP_PUBLIC_URL;
+  let publicUrl: URL | undefined;
+  if (publicRaw) {
+    publicUrl = new URL(publicRaw);
+    const local = publicUrl.hostname === "localhost" || publicUrl.hostname === "127.0.0.1";
+    if (publicUrl.protocol !== "https:" && !local) {
+      throw new Error(`SXT_MCP_PUBLIC_URL must be https (got ${publicRaw}). OAuth 2.1 requires TLS.`);
+    }
+    publicUrl.pathname = "/";
+    publicUrl.search = "";
+    publicUrl.hash = "";
+  }
+
+  const rateRaw = process.env.SXT_MCP_RATE_LIMIT_PER_MIN;
+  const rateLimitPerMin = rateRaw ? Number(rateRaw) : 60;
+  if (!Number.isFinite(rateLimitPerMin) || rateLimitPerMin < 1) {
+    throw new Error(`SXT_MCP_RATE_LIMIT_PER_MIN must be a positive number, got: ${rateRaw}`);
+  }
+  const proxyRaw = process.env.SXT_MCP_TRUST_PROXY;
+  const trustProxy = proxyRaw !== undefined && proxyRaw !== "" ? Number(proxyRaw) : publicUrl ? 1 : 0;
+
+  return {
+    port,
+    bindHost,
+    bindExplicit,
+    allowedOrigins,
+    bearer,
+    publicUrl,
+    tokenSecret: process.env.SXT_MCP_TOKEN_SECRET || undefined,
+    tokenSecretPrevious: process.env.SXT_MCP_TOKEN_SECRET_PREVIOUS || undefined,
+    rateLimitPerMin,
+    allowKeyHeader: process.env.SXT_MCP_ALLOW_KEY_HEADER !== "0",
+    trustProxy: Number.isInteger(trustProxy) && trustProxy >= 0 ? trustProxy : 0,
+  };
 }
 
 export function loadConfig(): RuntimeConfig {

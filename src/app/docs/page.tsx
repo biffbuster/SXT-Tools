@@ -11,6 +11,9 @@ type SkillSpec = {
   highlights: string[];
   languages: string[];
   cardDescription: string;
+  // the `sxt` CLI command this skill maps to once installed from npm; omitted for
+  // reference-only skills (proof-of-sql-foundations) and skills without a CLI verb.
+  command?: string;
   // "stable" = ready to use today. "coming-soon" = SKILL.md scaffolded
   // (visible on the catalog so the roadmap is honest) but the CLI
   // implementation is in progress; the SKILL.md documents today's
@@ -20,10 +23,11 @@ type SkillSpec = {
 
 const SKILL_SPECS: SkillSpec[] = [
   {
-    plugin: "dreamspace-data",
+    plugin: "sxt-data",
     skill: "dataset-publish",
     lifecycle: "Publish",
     stage: 1,
+    command: "sxt publish <csv> [PREFIX.TABLE]",
     languages: ["TypeScript", "JavaScript"],
     cardDescription:
       "Publish a CSV, Parquet, or JSON file to Space and Time as a chain-secured table queryable with Proof of SQL.",
@@ -34,13 +38,14 @@ const SKILL_SPECS: SkillSpec[] = [
     ],
   },
   {
-    plugin: "dreamspace-data",
+    plugin: "sxt-data",
     skill: "index-contract",
     lifecycle: "Publish",
     stage: 1,
+    command: "sxt index --address 0x… --event-signature \"…\"",
     languages: ["TypeScript", "Solidity"],
     cardDescription:
-      "Register any EVM contract for SXT to index its events into queryable tables under your namespace. CLI registration ships now (index-contract.mjs via the createTableWithSciMetadata extrinsic — the same one the Studio UI submits). SXT's docs still list SCI zk-commitment itself as 'coming soon', so the on-chain proof pipeline against SCI tables isn't end-to-end yet.",
+      "Register any EVM contract for SXT to index its events into queryable tables under your namespace. CLI registration ships now (index-contract.mjs via the createTableWithSciMetadata extrinsic — the same one the Studio UI submits). The resulting tables are provable. Indexing runs from the registration block forward, with no historical backfill.",
     highlights: [
       "Keyless --event-signature mode, or verified-ABI fetch via Etherscan v2",
       "createTableWithSciMetadata extrinsic + per-table indexer funding (~100 SXT/event)",
@@ -49,7 +54,7 @@ const SKILL_SPECS: SkillSpec[] = [
     status: "coming-soon",
   },
   {
-    plugin: "dreamspace-query",
+    plugin: "sxt-query",
     skill: "proof-of-sql-foundations",
     lifecycle: "Foundations",
     stage: 0,
@@ -63,10 +68,11 @@ const SKILL_SPECS: SkillSpec[] = [
     ],
   },
   {
-    plugin: "dreamspace-query",
+    plugin: "sxt-query",
     skill: "run-proven-query",
     lifecycle: "Query",
     stage: 2,
+    command: "sxt verify",
     languages: ["TypeScript", "SQL"],
     cardDescription:
       "Run a SELECT against a published SXT table with proveExecution=true and return the proof receipt.",
@@ -77,10 +83,11 @@ const SKILL_SPECS: SkillSpec[] = [
     ],
   },
   {
-    plugin: "dreamspace-query",
+    plugin: "sxt-query",
     skill: "chain-data-query",
     lifecycle: "Query",
     stage: 2,
+    command: "sxt chain-plan --table … --predicate \"…\"",
     languages: ["TypeScript", "Solidity", "SQL"],
     cardDescription:
       "Generate a HyperKZG-provable parameterized SQL query against SXT's zk-committed Ethereum index, consumable by a Solidity contract on Base via IQueryRouter.requestQuery.",
@@ -91,7 +98,7 @@ const SKILL_SPECS: SkillSpec[] = [
     ],
   },
   {
-    plugin: "dreamspace-contracts",
+    plugin: "sxt-contracts",
     skill: "pre-deploy-audit",
     lifecycle: "Audit",
     stage: 3,
@@ -105,10 +112,11 @@ const SKILL_SPECS: SkillSpec[] = [
     ],
   },
   {
-    plugin: "dreamspace-contracts",
+    plugin: "sxt-contracts",
     skill: "deploy-contract",
     lifecycle: "Deploy",
     stage: 4,
+    command: "sxt deploy",
     languages: ["Solidity", "TypeScript"],
     cardDescription:
       "Deploy a Solidity contract to an EVM chain via forge create, gated behind a mainnet confirmation prompt.",
@@ -177,6 +185,7 @@ function loadSkills(): SkillCard[] {
       lifecycle: spec.lifecycle,
       highlights: spec.highlights,
       languages: spec.languages,
+      command: spec.command,
       githubUrl: `https://github.com/biffbuster/sxt-tools/blob/main/packages/plugins/${spec.plugin}/skills/${spec.skill}/SKILL.md`,
       status: spec.status ?? "stable",
     } satisfies SkillCard;
@@ -349,7 +358,7 @@ export default function DocsPage() {
         </p>
         <div className="skills-plugin-grid">
           <div className="skills-plugin-card">
-            <div className="skills-plugin-card-name">dreamspace-data</div>
+            <div className="skills-plugin-card-name">sxt-data</div>
             <div className="skills-plugin-card-desc">
               Publish CSVs to SXT chain as Proof-of-SQL-queryable tables, or register EVM
               contracts for event indexing.
@@ -359,7 +368,7 @@ export default function DocsPage() {
             </div>
           </div>
           <div className="skills-plugin-card">
-            <div className="skills-plugin-card-name">dreamspace-query</div>
+            <div className="skills-plugin-card-name">sxt-query</div>
             <div className="skills-plugin-card-desc">
               Verifiable SQL against published tables and SXT&apos;s pre-indexed Ethereum core.
               Foundations + REST execution with proof receipts.
@@ -369,7 +378,7 @@ export default function DocsPage() {
             </div>
           </div>
           <div className="skills-plugin-card">
-            <div className="skills-plugin-card-name">dreamspace-contracts</div>
+            <div className="skills-plugin-card-name">sxt-contracts</div>
             <div className="skills-plugin-card-desc">
               Audit and deploy Solidity contracts that consume Proof of SQL on Base or Ethereum.
             </div>
@@ -390,9 +399,9 @@ export default function DocsPage() {
         </p>
         <pre className="skills-install-block">
           <code>{`/plugin marketplace add biffbuster/sxt-tools
-/plugin install dreamspace-data@sxt-tools
-/plugin install dreamspace-query@sxt-tools
-/plugin install dreamspace-contracts@sxt-tools`}</code>
+/plugin install sxt-data@sxt-tools
+/plugin install sxt-query@sxt-tools
+/plugin install sxt-contracts@sxt-tools`}</code>
         </pre>
       </section>
 

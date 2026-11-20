@@ -4,7 +4,7 @@ Proof of SQL tooling for Space and Time. Publish data, register contracts for in
 
 ![version](https://img.shields.io/badge/version-0.2.0--beta.1-blue) ![node](https://img.shields.io/badge/node-%3E%3D20-brightgreen) ![license](https://img.shields.io/badge/license-MIT-lightgrey) ![platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows-informational)
 
-> Community-built, powered by Space and Time's public infrastructure. Not officially endorsed by Space and Time. Every command, cost, and limitation in this document was verified live on mainnet, most recently 2026-06-11 ([evidence](./CHANGELOG.md)).
+> Built in partnership with Space and Time. Every command, cost, and limitation in this document was verified live on mainnet, most recently 2026-06-11 ([evidence](./CHANGELOG.md)).
 
 ```
 $ sxt query
@@ -65,9 +65,10 @@ sxt verify        # same proof, more detail: positive and negative membership
 | `sxt preflight` | Install, manifest, and MCP health checks (21 checks) | free |
 | `sxt demo` | Live proven query plus contract liveness rehearsal | free |
 | `sxt publish <csv> [PREFIX.TABLE]` | CSV to chain-secured SXT table (schema auto-inferred) | **20 SXT burned** per table (+20 for a first namespace) |
-| `sxt verify` | Off-chain Proof of SQL on the active table. **The zero-cost gate** | free |
+| `sxt tables [search]` | List public tables, yours and other users' (`--describe PREFIX.TABLE` for columns) | free |
+| `sxt verify` | Off-chain Proof of SQL on the active table, or any table with `--table` / `--sql`. **The zero-cost gate** | free |
 | `sxt plan` | EVM proof plans for the active table | free |
-| `sxt chain-plan --table … --predicate … --param-types …` | Parameterized plan against SXT-indexed chain tables (`$1`, `$2` bound at call time) | free |
+| `sxt chain-plan --table … --predicate … --param-types …` | Parameterized plan against any provable table (`$1`, `$2` bound at call time) | free |
 | `sxt render` | Generate the typed Solidity consumer from a plan | free |
 | `sxt deploy` | Deploy to Base (idempotent, gated confirmation) | ~0.001 ETH gas |
 | `sxt query` | On-chain `query()`: proof verified on-chain, callback event fires | **100 SXT** plus gas |
@@ -124,26 +125,26 @@ Reading the result: open the callback tx on BaseScan. The `QueryRow` event argum
 
 ---
 
-## Guide 2: prove Ethereum chain facts (no publishing required)
+## Guide 2: prove facts from public tables (no publishing required)
 
-SXT pre-indexes Ethereum core data with zk commitments. The empirically proven surface today is `ETHEREUM.BLOCKS` and `ETHEREUM.TRANSACTIONS` (the wider catalog returns error 254018 until SXT promotes more tables).
+Any provable table on SXT mainnet works: `ETHEREUM.BLOCKS` (pre-indexed by SXT) or the tables other users have published. Find them with `sxt tables` and check one with `sxt tables --describe PREFIX.TABLE`.
 
-The key feature is parameterization: `$1` and `$2` are bound at `query()` call time, so one deployed contract answers the question for any inputs. Example: "has wallet X ever transacted with collection Y?"
+The key feature is parameterization: `$1` and `$2` are bound at `query()` call time, so one deployed contract answers the question for any inputs. Example: "is block N final, and how many transactions did it hold?"
 
 ```bash
 sxt chain-plan \
-  --table ETHEREUM.TRANSACTIONS \
-  --predicate "FROM_ADDRESS = \$1 AND TO_ADDRESS = \$2" \
-  --param-types VARCHAR,VARCHAR \
-  --projection "TRANSACTION_HASH" \
-  --name collection-activity
+  --table ETHEREUM.BLOCKS \
+  --predicate "BLOCK_NUMBER = \$1" \
+  --param-types BIGINT \
+  --projection "BLOCK_NUMBER, TRANSACTION_COUNT" \
+  --name block-finality
 
-sxt render --plan ../data/proof-plans/collection-activity.json --name CollectionActivity --params
-# contract with query(string from_address, string to_address)
-# forge build, sxt deploy, then call query(wallet, anyCollectionAddress)
+sxt verify --sql "SELECT BLOCK_NUMBER, TRANSACTION_COUNT FROM ETHEREUM.BLOCKS WHERE BLOCK_NUMBER = 22432845"
+sxt render --plan ../data/proof-plans/block-finality.json --name BlockFinality --params
+# contract with query(int64 block_number); forge build, sxt deploy, then call it
 ```
 
-Known `ETHEREUM.TRANSACTIONS` columns: `TIME_STAMP`, `BLOCK_NUMBER`, `TRANSACTION_HASH`, `TRANSACTION_INDEX`, `TRANSACTION_FEE`, `FROM_ADDRESS`, `TO_ADDRESS`. Prefer row-returning projections over `COUNT(*)` while the prover's aggregate path recovers (see Limitations).
+Of SXT's 22 `ETHEREUM.*` tables, three prove today: `BLOCKS`, `NATIVE_WALLETS` and `ERC173_OWNERSHIP_TRANSFERRED`. Their indexed rows start near block 22,432,845 (May 2025); earlier blocks verify but return no rows. Eleven others plan but fail at the prover, including `TRANSACTIONS`, which has also stalled the prover for every user (2026-11-10, 2026-11-16). `chain-plan` refuses those unless `--force` is passed. On the live catalog, hashes and addresses are VARBINARY (literal `X'…'` or bare `0x…`, param type `VARBINARY`), and DECIMAL or TIMESTAMP columns cannot be compared in WHERE.
 
 ---
 
@@ -163,7 +164,7 @@ sxt index --address 0x… --chain ethereum --events Transfer,Approval
 
 Supported chains are the SXT `Source` enum: `ethereum`, `sepolia`, `polygon`, `zksync` (not Base yet). Indexing is live-only (from the registration block forward, no historical backfill), and starting the indexer requires funding each table with at least 100 SXT via the per-table address shown at chain.spaceandtime.io.
 
-Status (June 2026): registration and data ingestion work, but SCI tables are not on the zk-proven surface yet ("coming soon" per SXT docs), so `sxt verify` returns 422 against them and on-chain `query()` would not fulfill. For chain-history proofs that work today, use Guide 2.
+Status (Nov 2026): SCI tables are provable. A live off-chain proof against a registered CryptoPunks table verified on 2026-06-30, even though SXT's docs still say "coming soon". Indexing is live-only, so for proofs over a contract's full history, use Guide 2.
 
 ---
 
@@ -182,11 +183,11 @@ Status (June 2026): registration and data ingestion work, but SCI tables are not
 
 ---
 
-## Known limitations (verified 2026-06-11)
+## Known limitations (verified 2026-11-19)
 
-- Aggregates (`COUNT`, `SUM`) are mid-recovery at SXT's prover, recovering table by table (`ETHEREUM.BLOCKS` works again; user tables pending). Point lookups and scans prove reliably.
-- The proven chain-data surface is narrow: `ETHEREUM.BLOCKS` plus `ETHEREUM.TRANSACTIONS` end-to-end. The rest of the catalog awaits commitment coverage.
-- SCI tables aren't provable yet (registration works; proofs "coming soon" per SXT).
+- Aggregates prove only with `GROUP BY` on one non-VARCHAR column (BIGINT and DECIMAL verified). A whole-table `COUNT(*)` plans but fails at the prover, and `GROUP BY` on a VARCHAR column does not compile. Point lookups, filtered scans and `LIMIT` samples prove reliably.
+- SXT's own chain-data surface is narrow. SXT's docs list 22 `ETHEREUM.*` tables as ZK-proven and the planner accepts all 22, but a live proof per table found three that execute: `BLOCKS`, `NATIVE_WALLETS` and `ERC173_OWNERSHIP_TRANSFERRED`. Eleven fail at execution even with a narrow `WHERE` (`TRANSACTIONS`, `CONTRACTS` and the token and NFT contract, approval, owner and transfer tables); the CLI and MCP refuse them. Five large tables are unverified and three `PROXY_*` tables are empty. Community tables published by other users prove (a cross-owner proof verified on 2026-11-17).
+- SCI tables index live only (no historical backfill). Filters on their BINARY address columns are planned by the prover but not yet proven end to end.
 - `sxt-proof-of-sql-sdk` is pinned at 0.54.0: 0.56.1/0.57.1 ship a broken wasm bundle.
 
 ---
@@ -197,9 +198,9 @@ The same pipeline is exposed as Claude Code skills (7 skills, 3 plugins) and a t
 
 ```
 /plugin marketplace add biffbuster/sxt-tools
-/plugin install dreamspace-data@sxt-tools      # dataset-publish, index-contract
-/plugin install dreamspace-query@sxt-tools     # proof-of-sql-foundations, run-proven-query, chain-data-query
-/plugin install dreamspace-contracts@sxt-tools # pre-deploy-audit, deploy-contract
+/plugin install sxt-data@sxt-tools      # dataset-publish, index-contract
+/plugin install sxt-query@sxt-tools     # proof-of-sql-foundations, run-proven-query, chain-data-query
+/plugin install sxt-contracts@sxt-tools # pre-deploy-audit, deploy-contract
 ```
 
 The MCP server (`packages/mcp/sxt-mcp/`, stdio plus read-only HTTP) exposes `publish_dataset`, `run_proven_query`, `audit_contract`, and `deploy_contract`. It is testnet-default and mainnet double-gated (`mainnet: true` per call AND `SXT_MCP_ALLOW_MAINNET=I-UNDERSTAND` in env). Setup and security model: [`packages/mcp/sxt-mcp/README.md`](./packages/mcp/sxt-mcp/README.md), [`SAFETY.md`](./packages/mcp/sxt-mcp/SAFETY.md).
@@ -224,7 +225,7 @@ The MCP server (`packages/mcp/sxt-mcp/`, stdio plus read-only HTTP) exposes `pub
 | Symptom | Cause and fix |
 |---|---|
 | `FundsUnavailable` on publish/index | The 20 SXT per-object creation burn. Fund SXT chain native (at least 40 for a first publish). `sxt publish` pre-checks and tells you exactly. |
-| `failed to deserialize prover response json: … AttestedCommitments` | Aggregate query during the prover's rolling recovery. Rewrite as a point lookup or scan, or wait. |
+| `Query execution failed 3 times` | The prover could not run this query: a whole-table aggregate, or one of the SXT tables that fail at execution today (see Known limitations). Retrying fails the same way. Rewrite as a point lookup, filtered scan, or grouped aggregate, or use a table that proves. |
 | `/v1/zkquery` returns `422 "does not exist in source network MAINNET"` | Table not promoted into the proven catalog. For your own tables: a `PRIMARY KEY` clause in the DDL (this CLI never emits one; applies to tables made elsewhere). For SCI tables: expected until SXT promotes SCI. |
 | `query()` times out at 1h, no callback | Same root cause as the 422, which is why `sxt verify` is mandatory before `sxt query`. Refund: `cancelQuery(queryId, payment)` after the timeout; `sxt inspect <txHash>` decodes the Payment struct. |
 | `401 SECURITY: Invalid JWT` | Raw API key used as Bearer. Exchange at `proxy.api.makeinfinite.dev/auth/apikey` first; all CLI commands do this automatically. |
@@ -237,7 +238,7 @@ The MCP server (`packages/mcp/sxt-mcp/`, stdio plus read-only HTTP) exposes `pub
 ## More
 
 - Architecture deep-dive: [`HOW_IT_WORKS.md`](./docs/HOW_IT_WORKS.md)
-- Reviewer walkthrough with mainnet evidence: [`REVIEW.md`](./docs/REVIEW.md) · beta onboarding: [`BETA.md`](./docs/BETA.md) · [`CHANGELOG.md`](./CHANGELOG.md)
+- [`CHANGELOG.md`](./CHANGELOG.md)
 - [`CONTRIBUTING.md`](./.github/CONTRIBUTING.md) · [`SECURITY.md`](./.github/SECURITY.md)
 - [Space and Time docs](https://docs.spaceandtime.io) · [PoSQL syntax spec](https://github.com/spaceandtimefdn/sxt-proof-of-sql/blob/main/docs/SQLSyntaxSpecification.md) · [sxt-chain-examples](https://github.com/spaceandtimefdn/sxt-chain-examples) · [sxt-proof-of-sql-sdk](https://github.com/spaceandtimefdn/sxt-proof-of-sql-sdk)
 

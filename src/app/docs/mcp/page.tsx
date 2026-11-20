@@ -1,157 +1,212 @@
 import Link from "next/link";
 
+// The hosted connector URL. Swap in the production domain when it is attached.
+const HOSTED_URL = "https://mcp.example.com/mcp";
+
 export default function McpPage() {
   return (
     <>
-      <h1>MCP integration</h1>
+      <h1>MCP server</h1>
       <p className="docs-subtitle">
-        One open-source server exposes the five SXT skills as MCP tools — callable from
-        Claude Desktop, Cursor, and any other client that speaks Anthropic's Model
-        Context Protocol. The skills themselves remain portable Markdown; the MCP
-        server is a thin protocol adapter.
+        Ask questions about Ethereum and your own published data from Claude, ChatGPT,
+        Cursor or any other MCP client. Every answer comes back with a Proof of SQL proof,
+        and the server verifies that proof before your agent sees the result.
       </p>
 
       <div className="docs-callout">
-        <div className="docs-callout-title">Status: v0.1.0 — shipped, npm publish pending</div>
+        <div className="docs-callout-title">Status: v0.4.0, hosted launch pending</div>
         <p>
-          All four <code>sxt.*</code> tools live in{" "}
-          <code>packages/mcp/sxt-mcp/</code>: testnet defaults, mainnet behind a
-          double-gate (<code>mainnet: true</code> arg <em>and</em>{" "}
-          <code>SXT_MCP_ALLOW_MAINNET=I-UNDERSTAND</code> env). The package is{" "}
-          <code>private:true</code> pending external security review before npm
-          publication; install today by building from source. Track at{" "}
-          <a
-            href="https://github.com/biffbuster/sxt-tools"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            github.com/biffbuster/sxt-tools
-          </a>
-          .
+          The hosted connector and the npm package are built and tested. The public URL
+          and the npm release go live together. Until then, run it locally from source
+          (see <a href="#local">Run it locally</a>).
         </p>
         <p>
-          <strong>Built independently — not endorsed or supported by Space and Time.</strong>{" "}
-          The phased rollout + mainnet double-gate are self-imposed
-          good-faith constraints, not SXT-imposed gates. Engage SXT
-          engineering directly for production use cases until an official
-          approval lands.
+          <strong>Built in partnership with Space and Time.</strong>
         </p>
       </div>
 
-      <h2 id="tldr">TL;DR install</h2>
-      <p>
-        Build from source today:
-      </p>
-      <pre>
-        <code>{`git clone https://github.com/biffbuster/sxt-tools.git
-cd sxt-tools && npm install   # root postinstall builds the MCP server`}</code>
-      </pre>
-      <p>
-        Once the package goes public on npm, the marketplace one-liner will be:
-      </p>
-      <pre>
-        <code>{`claude mcp install @biffbuster/sxt`}</code>
-      </pre>
-      <p>
-        Or paste a config block directly into your MCP host. See{" "}
-        <a href="#setup">Setup by client</a> below for Claude Desktop and Cursor blocks.
-      </p>
-
-      <h2 id="why-mcp">Why MCP, not just the plugin marketplace</h2>
-      <p>
-        Today the seven skills install through Claude Code's plugin marketplace as
-        Markdown <code>SKILL.md</code> files — works perfectly inside Claude Code, but
-        nowhere else. MCP is Anthropic's open spec for connecting agents to tools and
-        data. By shipping one MCP server, the same skills become callable from every
-        compliant client without per-vendor SDKs. Today that's Claude Desktop and
-        Cursor; soon Codex and Gemini as their MCP support lands.
-      </p>
-      <p>
-        The skills stay the source of truth. The MCP server reads each{" "}
-        <code>SKILL.md</code> and exposes it as a typed tool with structured arguments
-        and the same refusal rules baked in.
-      </p>
-
-      <h2 id="tools">Tools exposed by the server</h2>
-      <p>
-        Each shipped skill maps to one MCP tool. Tool names are namespaced under{" "}
-        <code>sxt.</code> for clean autocomplete in MCP host UIs.
-      </p>
-
-      <ul>
+      <h2 id="connect">Connect in three steps</h2>
+      <ol>
         <li>
-          <strong>
-            <code>sxt.publish_dataset</code>
-          </strong>{" "}
-          — wraps the <code>dataset-publish</code> skill. Args:{" "}
-          <code>csvPath</code>, <code>tableRef</code> (e.g.{" "}
-          <code>MY_AUDIT.KNOWN_EXPLOITS</code>),{" "}
-          <code>mainnet?: boolean</code> (default <code>false</code> → testnet).
-          The server auto-suffixes the namespace with the signer's uppercase hex,
-          enforces NOT NULL on every column, refuses PRIMARY KEY, and is
-          idempotent — catches <code>*AlreadyExists</code> errors and proceeds to
-          insert. Returns the finalized table reference + finalized block hash.
+          Get a Space and Time API key with an active subscription at{" "}
+          <a href="https://app.spaceandtime.ai" target="_blank" rel="noopener noreferrer">
+            app.spaceandtime.ai
+          </a>{" "}
+          (API Authentication).
         </li>
         <li>
-          <strong>
-            <code>sxt.run_proven_query</code>
-          </strong>{" "}
-          — wraps <code>run-proven-query</code>. Args: <code>tableRef</code>,{" "}
-          <code>sql</code> (validated inline against the proven surface — no
-          window funcs, no DML, no DDL),{" "}
-          <code>commitmentScheme</code> (default <code>HYPER_KZG</code>). Returns
-          rows + locally-verified HyperKZG proof.
+          Add this URL to your client as a remote MCP server: <code>{HOSTED_URL}</code>
         </li>
         <li>
-          <strong>
-            <code>sxt.audit_contract</code>
-          </strong>{" "}
-          — wraps <code>pre-deploy-audit</code>. Pure local execution: runs{" "}
-          <code>forge build</code> and (optionally) <code>slither</code>, computes
-          SHA-256 of every <code>.sol</code> source. No chain calls, no spend.
-          Args: <code>sourcePath</code>, <code>outputPath?</code>. Returns
-          structured <code>AUDIT_REPORT.md</code> contents with the
-          PASS/WARN/FAIL verdict.
+          Sign in once in the browser window that opens and paste your key. SXT checks it,
+          and your client stores it inside an encrypted token. The server keeps no copy.
         </li>
-        <li>
-          <strong>
-            <code>sxt.deploy_contract</code>
-          </strong>{" "}
-          — wraps <code>deploy-contract</code>. Args: <code>contractPath</code>,{" "}
-          <code>mainnet?: boolean</code> (default <code>false</code> → Sepolia),{" "}
-          <code>forceRedeploy?</code>. Mainnet requires both <code>mainnet: true</code>{" "}
-          <em>and</em> <code>SXT_MCP_ALLOW_MAINNET=I-UNDERSTAND</code> in the
-          server's env. Idempotent via <code>.deploy-state.json</code>;{" "}
-          <code>forceRedeploy</code> is refused on mainnet. Returns deployed
-          address + tx hash.
-        </li>
-      </ul>
+      </ol>
+      <p>
+        Queries are billed to your own SXT account. Finding tables and compiling plans is
+        free.
+      </p>
 
       <h2 id="setup">Setup by client</h2>
 
-      <h3>Claude Desktop</h3>
+      <h3>Claude (web and desktop)</h3>
       <p>
-        Add to <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>:
+        Go to Customize, then Connectors, then <strong>Add custom connector</strong>. Paste
+        the URL and click Connect.
       </p>
+
+      <h3>Claude Code</h3>
       <pre>
-        <code>{`{
-  "mcpServers": {
-    "sxt": {
-      "command": "npx",
-      "args": ["-y", "@biffbuster/sxt-mcp"],
-      "env": {
-        "SXT_PRIVATE_KEY": "0x…",
-        "MAKEINFINITE_API_KEY": "sxt_…"
-      }
-    }
-  }
-}`}</code>
+        <code>{`claude mcp add --transport http sxt ${HOSTED_URL}`}</code>
       </pre>
-      <p>Restart Claude Desktop. Tools appear in the tool picker prefixed <code>sxt.</code>.</p>
+      <p>
+        Then run <code>/mcp</code> inside Claude Code to finish signing in.
+      </p>
 
       <h3>Cursor</h3>
       <p>
-        In <code>~/.cursor/mcp.json</code> (or via Cursor Settings → MCP):
+        In <code>~/.cursor/mcp.json</code>, or through Cursor Settings, then MCP:
+      </p>
+      <pre>
+        <code>{`{
+  "mcpServers": {
+    "sxt": { "url": "${HOSTED_URL}" }
+  }
+}`}</code>
+      </pre>
+
+      <h3>ChatGPT</h3>
+      <p>
+        Turn on Developer mode, then add a connector with the URL above. ChatGPT runs the
+        same sign-in flow.
+      </p>
+
+      <h3>Agents and scripts</h3>
+      <p>
+        Clients that cannot open a browser skip sign-in and send the key on every request:
+      </p>
+      <pre>
+        <code>{`X-SXT-API-Key: <your SXT API key>`}</code>
+      </pre>
+
+      <h2 id="ask">What you can ask</h2>
+      <ul>
+        <li>&quot;Which tables can I prove queries against?&quot;</li>
+        <li>&quot;Find a public iris dataset and prove the first five rows.&quot;</li>
+        <li>&quot;How large was block 20,000,000 and how many transactions did it hold? Prove it.&quot;</li>
+        <li>&quot;Is this wallet in the allowlist table I published?&quot;</li>
+        <li>&quot;Compile this query into a plan my Base contract can submit.&quot;</li>
+      </ul>
+      <p>
+        The agent finds the right table and its columns on its own, writes SQL that the
+        prover accepts, and returns rows with a verified proof.
+      </p>
+
+      <h2 id="tools">Tools</h2>
+      <table className="comparison-table">
+        <thead>
+          <tr>
+            <th>Tool</th>
+            <th>What it does</th>
+            <th>Cost</th>
+            <th>Where</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>sxt.list_tables</code></td>
+            <td>
+              Every public table on SXT mainnet: Ethereum blocks plus the tables other users have
+              published, with size and date. Search, filter by namespace, page through.
+            </td>
+            <td>Free</td>
+            <td>Hosted, local</td>
+          </tr>
+          <tr>
+            <td><code>sxt.describe_table</code></td>
+            <td>Whether any table (including one you published) can be proven, plus its exact columns and types.</td>
+            <td>Free</td>
+            <td>Hosted, local</td>
+          </tr>
+          <tr>
+            <td><code>sxt.run_proven_query</code></td>
+            <td>
+              Runs a SELECT on any public table with a proof, verifies the proof, returns readable
+              rows. SQL the prover cannot prove is refused first, for free. Long proofs return a
+              query id.
+            </td>
+            <td>One query credit</td>
+            <td>Hosted, local</td>
+          </tr>
+          <tr>
+            <td><code>sxt.get_proof_result</code></td>
+            <td>Picks up a long-running proof by its query id.</td>
+            <td>Free</td>
+            <td>Hosted, local</td>
+          </tr>
+          <tr>
+            <td><code>sxt.generate_proof_plan</code></td>
+            <td>Compiles SQL into the plan a Solidity contract submits to the onchain QueryRouter.</td>
+            <td>Free</td>
+            <td>Hosted, local</td>
+          </tr>
+          <tr>
+            <td><code>sxt.publish_dataset</code></td>
+            <td>Publishes a CSV as a provable table.</td>
+            <td>SXT chain credits</td>
+            <td>Local</td>
+          </tr>
+          <tr>
+            <td><code>sxt.audit_contract</code></td>
+            <td>Runs <code>forge build</code> and <code>slither</code> on a Solidity project.</td>
+            <td>Free</td>
+            <td>Local</td>
+          </tr>
+          <tr>
+            <td><code>sxt.deploy_contract</code></td>
+            <td>Deploys a contract from a forge artifact.</td>
+            <td>Gas</td>
+            <td>Local</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        The hosted server is read-only. Publishing and deploying need a wallet key and
+        auditing needs your files, so those three tools only run on your own machine.
+      </p>
+
+      <h2 id="trust">Why you can trust the numbers</h2>
+      <ul>
+        <li>
+          Each result carries a HyperKZG proof that the rows are the output of that SQL over
+          the committed table. The server checks it before returning anything.
+        </li>
+        <li>
+          The same proof system backs the onchain verifier on Base, so a query that proves
+          here also fulfills onchain.
+        </li>
+        <li>
+          The repo&apos;s parity test runs the same query through the MCP server and through
+          the Space and Time SDK directly and compares the output.
+        </li>
+      </ul>
+
+      <h2 id="security">Security</h2>
+      <ul>
+        <li>No database. Your key lives only inside an AES-256-GCM sealed token held by your client.</li>
+        <li>OAuth 2.1 with PKCE. Refresh tokens rotate on every use.</li>
+        <li>Per-user rate limits. Errors return a stable code and a request id, never upstream internals.</li>
+        <li>
+          Locally, mainnet writes need two switches: <code>mainnet: true</code> on the call and{" "}
+          <code>SXT_MCP_ALLOW_MAINNET=I-UNDERSTAND</code> in the server environment. Defaults
+          are testnet and Sepolia.
+        </li>
+      </ul>
+
+      <h2 id="local">Run it locally</h2>
+      <p>
+        The local server has all eight tools. Add it to Claude Desktop, Cursor or any stdio
+        client:
       </p>
       <pre>
         <code>{`{
@@ -160,224 +215,81 @@ cd sxt-tools && npm install   # root postinstall builds the MCP server`}</code>
       "command": "npx",
       "args": ["-y", "@biffbuster/sxt-mcp"],
       "env": {
-        "SXT_PRIVATE_KEY": "0x…",
-        "MAKEINFINITE_API_KEY": "sxt_…"
+        "SXT_API_KEY": "<your SXT API key>",
+        "PRIVATE_KEY": "0x<wallet key, only for publish and deploy>"
       }
     }
   }
 }`}</code>
       </pre>
-
-      <h3>Codex / Gemini / others</h3>
       <p>
-        Pending vendor MCP support. The server is host-agnostic — once a client
-        implements the MCP spec, the same config block above works.
-      </p>
-
-      <h2 id="auth">Authentication</h2>
-      <p>The server requires two secrets, supplied as env vars in the host's MCP config:</p>
-      <ul>
-        <li>
-          <strong>
-            <code>SXT_PRIVATE_KEY</code>
-          </strong>{" "}
-          — your SXT chain wallet (<code>0x…</code>, 32-byte hex). Used to sign{" "}
-          <code>tables.createTables</code> + <code>indexing.submitData</code> when{" "}
-          <code>sxt.publish_dataset</code> is called. Wallet must hold compute credits
-          funded at <a href="https://chain.spaceandtime.io" target="_blank" rel="noopener noreferrer">chain.spaceandtime.io</a>.
-        </li>
-        <li>
-          <strong>
-            <code>MAKEINFINITE_API_KEY</code>
-          </strong>{" "}
-          — your Space and Time REST API key. Server exchanges it for a 25-min JWT at{" "}
-          <code>POST /auth/apikey</code>, then submits proven queries via{" "}
-          <code>/v1/zkquery</code>.
-        </li>
-      </ul>
-      <div className="docs-callout docs-callout-warning">
-        <div className="docs-callout-title">Don't ship secrets</div>
-        Both values are sensitive. Store them in <code>~/.config/sxt-mcp/.env</code>
-        and reference via <code>{`"env": { "SXT_PRIVATE_KEY": "$SXT_PRIVATE_KEY" }`}</code>
-        if your host supports env interpolation. Never commit{" "}
-        <code>claude_desktop_config.json</code> with values inline.
-      </div>
-
-      <h2 id="transport">Transport</h2>
-      <p>Two binaries ship in v0.1.0, mapped to two use cases.</p>
-
-      <table className="comparison-table">
-        <thead>
-          <tr>
-            <th>Binary</th>
-            <th>Transport</th>
-            <th>Tools exposed</th>
-            <th>For</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><code>sxt-mcp</code></td>
-            <td>stdio</td>
-            <td>All four (<code>publish</code>, <code>run_proven_query</code>, <code>audit</code>, <code>deploy</code>)</td>
-            <td>Claude Desktop, Claude Code, Cursor</td>
-          </tr>
-          <tr>
-            <td><code>sxt-mcp-http</code></td>
-            <td>Streamable HTTP</td>
-            <td>Read-only <code>sxt.run_proven_query</code></td>
-            <td>ChatGPT Developer Mode, hosted web-MCP clients</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <p>
-        The HTTP binary deliberately narrows to one tool. Publish and deploy need a private key, audit needs filesystem access — neither belongs on a network-exposed endpoint. Read-only proof queries do, and that&apos;s what gets exposed.
-      </p>
-      <p>
-        Default bind is loopback (<code>127.0.0.1:3333</code>). Exposing to a remote client requires a bearer token (constant-time comparison) plus host-header and Origin allowlists. Tunneling the loopback server through <code>cloudflared</code> or <code>ngrok</code> is the supported pattern today.
-      </p>
-
-      <h2 id="roadmap">Roadmap to production</h2>
-      <p>
-        v0.1.0 is <strong>single-tenant</strong>: one set of credentials in the host&apos;s MCP config, one user per server process. That&apos;s the right shape for personal use on Claude Desktop, Cursor, and Claude Code. The path beyond that — hosted multi-user deployments listed on claude.ai integrations, ChatGPT Developer Mode, or equivalents — is a two-step lift. Step 1 is purely engineering. Step 2 needs SXT team coordination.
-      </p>
-
-      <h3 id="v02">v0.2.0 — Hosted multitenant HTTP with OAuth</h3>
-      <p>
-        The MCP 2025-06 spec adds OAuth 2.1 with PKCE for HTTP transport. With that, one running server can serve many users, each authenticated and isolated.
-      </p>
-      <table className="comparison-table">
-        <thead>
-          <tr><th>What changes</th><th>Why it&apos;s needed</th></tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>OAuth 2.1 + PKCE flow per user</td>
-            <td>Replaces the shared bearer token. Each user authenticates separately and the server gets a short-lived per-user token.</td>
-          </tr>
-          <tr>
-            <td>Per-request credential resolution</td>
-            <td>No more shared <code>process.env.PRIVATE_KEY</code>. The server resolves the active tenant&apos;s credentials per call.</td>
-          </tr>
-          <tr>
-            <td>Tenant isolation in tool handlers</td>
-            <td>No shared state between calls. Audit sandbox paths, deploy-state files, and rate buckets all become per-tenant.</td>
-          </tr>
-          <tr>
-            <td>Encrypted credential store</td>
-            <td>Per-user SXT API key and signer key, encrypted at rest (DB or KMS).</td>
-          </tr>
-          <tr>
-            <td>Per-tenant audit log + rate limit</td>
-            <td>Observability and abuse control for a public endpoint.</td>
-          </tr>
-        </tbody>
-      </table>
-      <p>
-        Scope estimate: ~2 weeks. Server stays open source. Can be self-hosted or hosted under any operator. No external dependency.
-      </p>
-
-      <h3 id="v10">v1.0.0 — Sanctioned production launch</h3>
-      <p>
-        Five things community work alone can&apos;t deliver. Each is a coordination point with the SXT team.
-      </p>
-      <table className="comparison-table">
-        <thead>
-          <tr><th>What&apos;s needed</th><th>Why it requires SXT team input</th></tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Removal of the &quot;not endorsed&quot; disclaimer</td>
-            <td><code>SAFETY.md</code> today states the server is built independently. Production requires sign-off on the tool surface and security posture.</td>
-          </tr>
-          <tr>
-            <td>Elevated API rate limits or OAuth federation</td>
-            <td>Current per-key limits work for single-user CLI. A hosted multi-user service needs either provisioned higher limits, or federated OAuth so each user spends their own quota.</td>
-          </tr>
-          <tr>
-            <td>Reviewed mainnet surface</td>
-            <td>Today&apos;s <code>mainnet: true</code> double-gate is self-imposed. Production policy on which mainnet operations are safe to expose to OAuth users needs SXT team input.</td>
-          </tr>
-          <tr>
-            <td>Listing in official integration directories</td>
-            <td>claude.ai integrations, ChatGPT connectors, and equivalents list servers under a verified brand. Endorsement is the gate.</td>
-          </tr>
-          <tr>
-            <td>Brand alignment</td>
-            <td>The <code>dreamspace-*</code> plugin slugs are legacy. Production naming aligns with whatever the SXT team prefers for an official integration.</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <h3 id="engage">How to engage</h3>
-      <p>The repo is designed to make external review easy:</p>
-      <ul>
-        <li>Each tool handler mirrors a canonical script under <code>examples/scripts/</code> line for line — no novel protocol logic to audit</li>
-        <li><code>SAFETY.md</code> is the contract: phased rollout, mainnet double-gate, dependency surface per phase</li>
-        <li>The parity test (<code>sxt parity</code>) proves the MCP wrapping matches the SDK directly, byte-for-byte</li>
-        <li>Day 1 hardening is in place: <code>zod.strict()</code> input validation, audit path sandbox, structured logger, per-tool annotations</li>
-      </ul>
-      <p>
-        Open a discussion at{" "}
-        <a href="https://github.com/biffbuster/sxt-tools/discussions" target="_blank" rel="noopener noreferrer">
-          github.com/biffbuster/sxt-tools/discussions
-        </a>{" "}
-        referencing the <code>SAFETY.md</code> contract.
-      </p>
-
-      <h2 id="building">Build &amp; contribute</h2>
-      <p>
-        The server lives in <code>packages/mcp/sxt-mcp/</code> in this repo (TypeScript,
-        Anthropic <code>@modelcontextprotocol/sdk</code>). Each tool handler reads its{" "}
-        backing <code>SKILL.md</code> for the trigger phrases and refusal rules — no
-        duplication.
+        Until the npm release, build from source and point <code>command</code> at{" "}
+        <code>node</code> with the path to <code>packages/mcp/sxt-mcp/dist/index.js</code>:
       </p>
       <pre>
-        <code>{`git clone https://github.com/biffbuster/sxt-tools
-cd sxt-tools/packages/mcp/sxt-mcp
-npm install
-npm run build
-npm run dev    # stdio, ready for local Claude Desktop wiring`}</code>
+        <code>{`git clone https://github.com/biffbuster/sxt-tools.git
+cd sxt-tools && npm install   # builds the MCP server`}</code>
       </pre>
+      <div className="docs-callout docs-callout-warning">
+        <div className="docs-callout-title">Keep keys out of git</div>
+        Never commit a client config file with keys in it. <code>PRIVATE_KEY</code> can spend
+        funds; leave it out unless you need publish or deploy.
+      </div>
 
       <h2 id="troubleshooting">Troubleshooting</h2>
       <table className="comparison-table">
         <thead>
           <tr>
-            <th>Symptom</th>
-            <th>First check</th>
-            <th>Likely cause</th>
+            <th>Error code</th>
+            <th>Meaning</th>
+            <th>Fix</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td><code>sxt.run_proven_query</code> returns 422</td>
-            <td>Was the table published with a <code>PRIMARY KEY</code> clause?</td>
+            <td><code>SXT_KEY_INVALID</code></td>
+            <td>SXT rejected the key.</td>
+            <td>Reconnect with a current key from app.spaceandtime.ai.</td>
+          </tr>
+          <tr>
+            <td><code>SXT_SUBSCRIPTION_REQUIRED</code></td>
+            <td>The key works but the account has no active subscription.</td>
+            <td>Activate a subscription, then retry.</td>
+          </tr>
+          <tr>
+            <td><code>TABLE_NOT_PROVABLE</code></td>
+            <td>The table does not exist or has no proof commitments.</td>
             <td>
-              MAINNET indexer skips tables with PK. Republish without it under a new
-              namespace. See <Link href="/docs/space-and-time">SXT primitives</Link>.
+              Check the name with <code>sxt.describe_table</code>. Tables published with a
+              PRIMARY KEY never become provable; republish without it.
             </td>
           </tr>
           <tr>
-            <td>401 SECURITY: Invalid JWT</td>
-            <td><code>MAKEINFINITE_API_KEY</code> set?</td>
+            <td><code>SQL_REJECTED</code></td>
+            <td>The SQL uses something the prover cannot prove. Nothing was spent.</td>
             <td>
-              Server exchanges the API key for a JWT at <code>/auth/apikey</code>; raw
-              key as Bearer is not accepted.
+              The message says what to change. See the{" "}
+              <Link href="/docs/space-and-time">proven SQL surface</Link>. Aggregates need GROUP BY
+              on one non-text column; DECIMAL and TIMESTAMP columns cannot be filtered; large
+              tables need a WHERE or LIMIT.
             </td>
           </tr>
           <tr>
-            <td>Tool list empty in Claude Desktop</td>
-            <td>Config file path correct + Desktop restarted?</td>
-            <td>Stdio servers only attach on host start. Quit and relaunch.</td>
+            <td><code>QUERY_FAILED</code></td>
+            <td>The prover accepted the query but could not run it.</td>
+            <td>Retrying the same SQL fails the same way. Narrow it or rewrite it.</td>
           </tr>
           <tr>
-            <td><code>sxt.deploy_contract</code> refuses mainnet</td>
-            <td>Did you pass <code>confirm: true</code>?</td>
+            <td><code>RATE_LIMITED</code></td>
+            <td>Too many calls in a minute.</td>
+            <td>Wait for the time in the message.</td>
+          </tr>
+          <tr>
+            <td>Result says <code>pending</code></td>
+            <td>The proof is still running.</td>
             <td>
-              Mainnet deploys are gated by an explicit confirm arg — guards against
-              accidental ~$0.50 ETH spend. Working as intended.
+              Call <code>sxt.get_proof_result</code> with the query id. It does not spend
+              another credit.
             </td>
           </tr>
         </tbody>
@@ -386,25 +298,22 @@ npm run dev    # stdio, ready for local Claude Desktop wiring`}</code>
       <h2 id="related">Related</h2>
       <ul>
         <li>
-          <Link href="/docs">Skills catalog</Link> — the seven skills the server wraps
+          <Link href="/docs">Skills catalog</Link>: the Claude Code skills behind the same
+          pipeline
         </li>
         <li>
-          <Link href="/docs/quick-start">Quick start</Link> — five commands from clone
-          to a verified Base-mainnet event (today, via Claude Code plugin)
+          <Link href="/docs/quick-start">Quick start</Link>: the <code>sxt</code> CLI from
+          clone to a verified Base event
         </li>
         <li>
-          <Link href="/docs/space-and-time">SXT primitives</Link> — protocol surface
-          the server interacts with
+          <Link href="/docs/space-and-time">SXT primitives</Link>: the protocol surface the
+          server uses
         </li>
         <li>
-          <a
-            href="https://modelcontextprotocol.io"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener noreferrer">
             modelcontextprotocol.io
-          </a>{" "}
-          — the open spec
+          </a>
+          : the open spec
         </li>
       </ul>
     </>

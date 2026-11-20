@@ -6,10 +6,10 @@ The package ships two binaries.
 
 | Binary | Transport | Tools exposed | Use |
 |---|---|---|---|
-| `sxt-mcp` | stdio | All four (`publish_dataset`, `run_proven_query`, `audit_contract`, `deploy_contract`) | Claude Desktop, Claude Code, Cursor |
-| `sxt-mcp-http` | Streamable HTTP | Read-only `run_proven_query` | ChatGPT Developer Mode connector, custom web-MCP clients |
+| `sxt-mcp` | stdio | All eight | Claude Desktop, Claude Code, Cursor |
+| `sxt-mcp-http` | Streamable HTTP | The five read-only tools: `list_tables`, `describe_table`, `run_proven_query`, `get_proof_result`, `generate_proof_plan` | Hosted connector for Claude, ChatGPT, Cursor and any remote MCP client |
 
-The HTTP binary deliberately narrows to one tool. Publish and deploy need a private key; audit needs filesystem access. Neither belongs on a network-exposed connector. Read-only proof queries do, and that is what `sxt-mcp-http` exposes.
+The HTTP binary deliberately narrows to read-only tools. Publish and deploy need a private key; audit needs filesystem access. Neither belongs on a network-exposed connector. Discovery, proof queries and plan compilation do, and that is what `sxt-mcp-http` exposes. In public mode every user signs in with their own SXT API key, so queries are billed to the caller's own account.
 
 Each handler mirrors the canonical script under `examples/scripts/` line-for-line. The server is a protocol adapter, not a re-implementation.
 
@@ -19,17 +19,21 @@ Each handler mirrors the canonical script under `examples/scripts/` line-for-lin
 
 | Tool | Cost surface | Mirror script |
 |---|---|---|
+| `sxt.list_tables` | None (discovery API read with the caller's key; curated list without one) | `examples/scripts/tables.mjs` (`sxt tables`) |
+| `sxt.describe_table` | None (chain RPC read, plus discovery for size and owner) | `sxt tables --describe` (decodes the column list from a `SELECT *` proof plan) |
 | `sxt.publish_dataset` | SXT chain credits per row | `examples/scripts/publish-dataset-cli.mjs` |
-| `sxt.run_proven_query` | One `/v1/zkquery` API tick | `examples/scripts/verify-table.mjs` |
+| `sxt.run_proven_query` | One `/v1/zkquery` API tick | `examples/scripts/verify-table.mjs` (request sequence of the SDK's `queryAndVerify`, with an owned poll loop; see SAFETY.md) |
+| `sxt.get_proof_result` | None (resumes a pending proof) | none |
+| `sxt.generate_proof_plan` | None (chain RPC read) | `examples/scripts/save-proof-plans.mjs` |
 | `sxt.audit_contract` | None (pure local `forge build` + `slither`) | `examples/scripts/audit-with-sxt.mjs` |
 | `sxt.deploy_contract` | ~$0.50 ETH gas | `examples/scripts/deploy-onchain-query.mjs` |
-| `sxt://docs/proof-of-sql-foundations` | None (MCP resource, Markdown) | `packages/plugins/dreamspace-query/skills/proof-of-sql-foundations/SKILL.md` |
+| `sxt://docs/proof-of-sql-foundations` | None (MCP resource, Markdown) | `packages/plugins/sxt-query/skills/proof-of-sql-foundations/SKILL.md` |
 
 ---
 
 ## Status
 
-`v0.1.0`. All four tools are live. Mainnet operations are enabled behind the double-gate. The package is marked `private: true` in `package.json` until the Tier 2 polish lands (error sanitizer, structured audit log, vitest suite). Until then, install by building from source.
+`v0.4.0`. All eight tools are live. Mainnet operations are enabled behind the double-gate. The HTTP binary runs as a hosted, multi-user connector with OAuth 2.1 and bring-your-own SXT key (see "Hosted deployment"). The package is ready for npm (`npm pack` installs and runs cleanly from an empty folder) but not yet published; build from source until then.
 
 ---
 
@@ -47,8 +51,8 @@ npm run build
 Run the smoke tests. Both are zero-cost. Neither calls SXT.
 
 ```bash
-node scripts/day1-smoke.mjs        # stdio: 4 protocol checks
-node scripts/day2-http-smoke.mjs   # http:  12 protocol + security checks
+npm test                           # vitest: sealed tokens, sanitizer, rate limit, full OAuth flow
+npm run smoke                      # day1 (stdio) + day2 (http, 12 protocol + security checks)
 ```
 
 ---
@@ -61,8 +65,8 @@ Wire into Claude Desktop via `~/Library/Application Support/Claude/claude_deskto
 {
   "mcpServers": {
     "sxt": {
-      "command": "node",
-      "args": ["/absolute/path/to/sxt-tools/packages/mcp/sxt-mcp/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "@biffbuster/sxt-mcp"],
       "env": {
         "SXT_API_KEY": "...",
         "PRIVATE_KEY": "0x..."
@@ -72,7 +76,7 @@ Wire into Claude Desktop via `~/Library/Application Support/Claude/claude_deskto
 }
 ```
 
-Restart Claude Desktop. The four `sxt.*` tools appear in the tool picker. The `proof_of_sql_foundations` resource is reachable from the same picker.
+Restart Claude Desktop. The eight `sxt.*` tools appear in the tool picker, and the `proof_of_sql_foundations` resource is reachable from the same picker. Until the npm release, use `"command": "node"` with the absolute path to `dist/index.js`. `PRIVATE_KEY` is only needed for publish and deploy; leave it out otherwise.
 
 For Cursor, the same config shape lives at `~/.cursor/mcp.json`.
 
@@ -97,6 +101,38 @@ The HTTP entrypoint refuses to start a non-loopback bind without `SXT_MCP_HTTP_B
 
 For ChatGPT, tunnel the loopback server to a public HTTPS URL (`cloudflared`, `ngrok`) and paste the URL plus the bearer into the Developer Mode connector dialog.
 
+## Hosted deployment
+
+Public mode turns the HTTP binary into a hosted connector, like any remote MCP server: users add one URL to their client and sign in once in the browser.
+
+```bash
+SXT_MCP_PUBLIC_URL=https://mcp.example.com \
+SXT_MCP_TOKEN_SECRET="$(node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))")" \
+SXT_MCP_BIND_HOST=0.0.0.0 \
+  node dist/http.js
+```
+
+Production runs on **Cloudflare Workers**, the same edge platform the major data-provider MCP servers sit behind:
+
+```bash
+npx wrangler secret put SXT_MCP_TOKEN_SECRET
+npm run deploy:worker          # extracts the verifier WASM, then wrangler deploy
+```
+
+Set `SXT_MCP_PUBLIC_URL` in `wrangler.jsonc` and attach a custom domain. `npm run dev:worker` runs it locally under `workerd`. `SAFETY.md` → "Hosting: Cloudflare Workers" covers how the Worker differs.
+
+As a fallback, build the image from this directory with `docker build -t sxt-mcp .` and run it with the same two variables. The image honours the platform's `PORT`, logs JSON to stderr, and answers `/healthz` and `/readyz`.
+
+How a user connects:
+
+1. Add `https://mcp.example.com/mcp` as a remote MCP server in their client.
+2. The client discovers the OAuth server, registers itself, and opens the consent page.
+3. The user pastes their SXT API key. The server checks it with SXT, then issues tokens sealed over it. The server stores nothing.
+
+Headless agents skip OAuth and send `X-SXT-API-Key: <their key>` on each request.
+
+The server needs no SXT key and no wallet key of its own. Run it with neither set. `SAFETY.md` → "Public mode" lists every rule and variable.
+
 ### HTTP environment variables
 
 | Variable | Default | Purpose |
@@ -119,31 +155,23 @@ Full security model: [`SAFETY.md`](./SAFETY.md).
 ## Architecture
 
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   index.ts      │    │    http.ts      │    │  (future)       │
-│   stdio entry   │    │   HTTP entry    │    │                 │
-└────────┬────────┘    └────────┬────────┘    └─────────────────┘
-         │                      │
-         │                      │
-         └──────────┬───────────┘
-                    ▼
-           ┌────────────────────┐
-           │   server.ts        │  buildServer({ allowedTools? })
-           │   tool registry    │  ALL_TOOLS = [4 handlers]
-           │   Zod schemas      │  HTTP_READ_ONLY_TOOLS = [run_proven_query]
-           │   MCP annotations  │
-           └────────┬───────────┘
-                    │
-                    ▼
-           ┌────────────────────┐
-           │   tools/*.ts       │  one file per tool
-           │   lib/network.ts   │  mainnet double-gate
-           │   lib/logger.ts    │  level-gated logger, secret redaction
-           │   lib/config.ts    │  env-var loader
-           └────────────────────┘
+index.ts (stdio)         http.ts (Node)          worker/index.ts (Cloudflare)
+      │                        │                         │
+      ▼                        └──────────┬──────────────┘
+server.ts                                 ▼
+  all 8 tools                       http-app.ts
+      │                         OAuth, rate limit, sanitizer
+      │                                   │
+      └──────────────┬────────────────────┘
+                     ▼
+                  core.ts            buildMcpServer(tools, options)
+                     │
+   tools/catalog-read.ts             5 read-only tools (the only HTTP surface)
+   tools/{publish,audit,deploy}      write tools, stdio only
+   lib/                              prover loop, chain RPC, network gate, sealing
 ```
 
-The factory in `server.ts` is the single source of truth for tool logic. Both entrypoints call `buildServer()`; only the transport differs. Adding a tool means editing `ALL_TOOLS` in `server.ts`. If the tool is safe to expose over HTTP, add its name to `HTTP_READ_ONLY_TOOLS` in the same file.
+`core.ts` builds the server from whatever tool list it is given. HTTP entrypoints pass only `READ_ONLY_TOOLS` from `tools/catalog-read.ts` and never import `server.ts`, so the write tools and their dependencies are never loaded on a network-exposed server. A tool that is safe to expose over HTTP (no private key, no filesystem, spends at most the caller's own credit) goes in `catalog-read.ts`; anything else goes in `WRITE_TOOLS` in `server.ts`.
 
 ---
 
