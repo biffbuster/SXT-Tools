@@ -299,28 +299,51 @@ function describe(err: Error): string {
   return cause?.code ? `${err.message} (${cause.code})` : err.message;
 }
 
-type Reviver = (this: unknown, key: string, value: unknown) => unknown;
+/**
+ * Quotes every integer literal outside a JSON string whose value is beyond
+ * Number.MAX_SAFE_INTEGER, so JSON.parse yields its exact decimal text.
+ * Strings are skipped whole (escapes included), so VARCHAR data is never
+ * touched. A scanner rather than JSON.parse's reviver `context.source`, which
+ * Node 20 lacks.
+ */
+export function quoteUnsafeIntegers(json: string): string {
+  let out = "";
+  let last = 0;
+  let i = 0;
+  while (i < json.length) {
+    const c = json.charCodeAt(i);
+    if (c === 34 /* " */) {
+      i++;
+      while (i < json.length && json.charCodeAt(i) !== 34) i += json.charCodeAt(i) === 92 /* \ */ ? 2 : 1;
+      i++;
+    } else if (c === 45 /* - */ || (c >= 48 && c <= 57)) {
+      let j = i + 1;
+      while (j < json.length && /[0-9.eE+-]/.test(json[j]!)) j++;
+      const token = json.slice(i, j);
+      if (/^-?\d+$/.test(token) && !Number.isSafeInteger(Number(token))) {
+        out += `${json.slice(last, i)}"${token}"`;
+        last = j;
+      }
+      i = j;
+    } else {
+      i++;
+    }
+  }
+  return last === 0 ? json : out + json.slice(last);
+}
 
 /**
- * Runs `fn` with JSON.parse keeping integers above 2^53 exact, as their
- * decimal source text. The SDK verifier builds its result as JSON inside WASM
- * and hands it to the global JSON.parse (the `__wbg_parse` import in the
- * glue), which rounds 64-bit DECIMAL limbs such as wei balances. `results.ts`
- * accepts string limbs, so those values decode exactly instead of being
- * dropped. Verification runs synchronously, so nothing else sees the swap.
- * Without reviver source access (pre-2023 V8) values pass through unchanged
- * and the decoder still refuses lossy limbs.
+ * Runs `fn` with JSON.parse keeping integers above 2^53 exact, as decimal
+ * strings. The SDK verifier builds its result as JSON inside WASM and hands it
+ * to the global JSON.parse (the `__wbg_parse` import in the glue), which
+ * rounds 64-bit DECIMAL limbs such as wei balances. `results.ts` accepts
+ * string limbs, so those values decode exactly instead of being dropped.
+ * Verification runs synchronously, so nothing else sees the swap.
  */
 export function withExactIntegers<T>(fn: () => T): T {
   const original = JSON.parse;
-  JSON.parse = ((text: string, reviver?: Reviver) =>
-    original(text, function (this: unknown, key: string, value: unknown, context?: { source?: string }) {
-      const exact =
-        typeof value === "number" && Number.isInteger(value) && !Number.isSafeInteger(value) && context?.source
-          ? context.source
-          : value;
-      return reviver ? reviver.call(this, key, exact) : exact;
-    } as Reviver)) as typeof JSON.parse;
+  JSON.parse = ((text: string, reviver?: Parameters<typeof JSON.parse>[1]) =>
+    original(quoteUnsafeIntegers(text), reviver)) as typeof JSON.parse;
   try {
     return fn();
   } finally {

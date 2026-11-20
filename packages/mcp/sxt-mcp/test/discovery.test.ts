@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { describeTableHandler, listTablesHandler } from "../src/tools/catalog.js";
 import { runProvenQueryHandler, setProverDepsForTest } from "../src/tools/run-proven-query.js";
 import { clearDiscoveryCache, parseSize } from "../src/lib/discovery.js";
-import { clearTokenCache, withExactIntegers } from "../src/lib/prover.js";
+import { clearTokenCache, quoteUnsafeIntegers, withExactIntegers } from "../src/lib/prover.js";
 import { formatDecimal, toRows } from "../src/lib/results.js";
 import { sanitizeError, UpstreamError } from "../src/lib/sanitize.js";
 
@@ -312,6 +312,17 @@ describe("withExactIntegers", () => {
     expect(out!.rows).toEqual([{ BALANCE: ((763n << 64n) | 15653940354382969921n).toString() }]);
     // Without the wrapper the limb rounds and the row is refused rather than wrong.
     expect(toRows(JSON.parse(wasmJson))).toBeNull();
+  });
+
+  it("quotes only unsafe integers outside strings", () => {
+    const text =
+      '{"a":[1,-2,9007199254740991,9007199254740993,-9007199254740993,1.5,2e30],' +
+      '"s":"[12345678901234567890, \\"99999999999999999999\\"]"}';
+    expect(JSON.parse(quoteUnsafeIntegers(text))).toEqual({
+      a: [1, -2, 9007199254740991, "9007199254740993", "-9007199254740993", 1.5, 2e30],
+      s: '[12345678901234567890, "99999999999999999999"]',
+    });
+    expect(quoteUnsafeIntegers('{"x":1}')).toBe('{"x":1}');
   });
 });
 
