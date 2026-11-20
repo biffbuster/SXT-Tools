@@ -30,6 +30,8 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm test
+      # The stdio smoke runs sxt.audit_contract, which wraps `forge build`.
+      - uses: foundry-rs/foundry-toolchain@v1
       # Smokes make no SXT calls and spend nothing.
       - run: npm run smoke
       - run: npm audit --omit=dev --audit-level=high
