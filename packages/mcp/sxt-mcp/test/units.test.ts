@@ -4,6 +4,7 @@ import { sanitizeError, ToolError, UpstreamError } from "../src/lib/sanitize.js"
 import { RateLimiter } from "../src/lib/rate-limit.js";
 import { redact } from "../src/lib/logger.js";
 import { MainnetGateError } from "../src/lib/errors.js";
+import { proofLogFields } from "../src/core.js";
 
 const SECRET_A = "a".repeat(40);
 const SECRET_B = "b".repeat(40);
@@ -114,5 +115,30 @@ describe("redact", () => {
     expect(line).not.toContain("AAAAbbbb");
     expect(line).not.toContain("eyJzdWIi");
     expect(line).toContain("[REDACTED-PRIVATE-KEY]");
+  });
+});
+
+describe("proofLogFields", () => {
+  it("keeps proof status and queryId, never rows or SQL", () => {
+    const fields = proofLogFields({
+      status: "verified",
+      queryId: "ee6cb902-aab2-4cf1-9601-cddc4ea0a5e7",
+      sql: "SELECT * FROM T LIMIT 1",
+      rows: [{ A: 1 }],
+    });
+    expect(fields).toEqual({ status: "verified", queryId: "ee6cb902-aab2-4cf1-9601-cddc4ea0a5e7" });
+  });
+
+  it("logs a pending proof distinctly", () => {
+    expect(proofLogFields({ status: "pending", queryId: "q1234567" })).toEqual({
+      status: "pending",
+      queryId: "q1234567",
+    });
+  });
+
+  it("adds nothing for results without proof fields", () => {
+    expect(proofLogFields({ tables: [] })).toEqual({});
+    expect(proofLogFields(null)).toEqual({});
+    expect(proofLogFields({ status: 1 })).toEqual({});
   });
 });
