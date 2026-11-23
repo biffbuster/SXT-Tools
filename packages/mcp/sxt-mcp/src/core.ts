@@ -27,6 +27,21 @@ import { sanitizeError, ToolError } from "./lib/sanitize.js";
 
 export const VERSION = "0.4.0";
 
+/**
+ * Proof status and prover queryId from a successful tool result, for the
+ * "tool call" log line. Without them a pending proof logs the same as a
+ * verified one, and a queryId a user reports matches no log line. Rows and
+ * SQL are never logged.
+ */
+export function proofLogFields(result: unknown): LogFields {
+  if (typeof result !== "object" || result === null) return {};
+  const { status, queryId } = result as { status?: unknown; queryId?: unknown };
+  const fields: LogFields = {};
+  if (typeof status === "string") fields.status = status;
+  if (typeof queryId === "string") fields.queryId = queryId;
+  return fields;
+}
+
 export interface ToolDef {
   name: string;
   description: string;
@@ -162,7 +177,7 @@ export function buildMcpServer(tools: readonly ToolDef[], options: BuildServerOp
       logger.trace(`${name} args: ${JSON.stringify(args ?? {})}`, { requestId });
       const parsed = tool.schema.parse(args ?? {});
       const result = await (tool.handler as Handler)(parsed, ctx);
-      finish("ok");
+      finish("ok", proofLogFields(result));
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };
