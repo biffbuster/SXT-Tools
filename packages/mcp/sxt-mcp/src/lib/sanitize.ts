@@ -25,6 +25,7 @@ export type ErrorCode =
   | "SXT_SUBSCRIPTION_REQUIRED"
   | "TABLE_NOT_PROVABLE"
   | "QUERY_FAILED"
+  | "QUERY_NOT_FOUND"
   | "RATE_LIMITED"
   | "UPSTREAM_TIMEOUT"
   | "UPSTREAM_ERROR"
@@ -67,6 +68,7 @@ const CANNED: Record<ErrorCode, string> = {
   SXT_SUBSCRIPTION_REQUIRED: "The SXT account behind this API key has no active subscription. Activate one at app.spaceandtime.ai, then retry.",
   TABLE_NOT_PROVABLE: "The table is not in the prover's MAINNET catalog. Check the table reference, or confirm it was published without a PRIMARY KEY clause.",
   QUERY_FAILED: "The prover accepted the query but could not execute it. Retrying the same SQL fails the same way. Narrow it with a WHERE filter or LIMIT, or rewrite it. Quote the queryId when reporting this to SXT.",
+  QUERY_NOT_FOUND: "The prover has no query with this queryId. It has expired, or it was submitted with a different SXT API key. Retrying fails the same way. Run the query again with sxt.run_proven_query.",
   RATE_LIMITED: "Too many requests for this connection. Wait a moment and retry.",
   UPSTREAM_TIMEOUT: "The SXT prover did not finish in time. Retry, or narrow the query.",
   UPSTREAM_ERROR: "The SXT prover returned an error for this query.",
@@ -98,6 +100,8 @@ function classifyUpstream(text: string): ErrorCode {
   if (/unable to generate proof plan|generate plan failed/i.test(text)) return "SQL_REJECTED";
   if (/does not exist in source network|\b422\b/i.test(text)) return "TABLE_NOT_PROVABLE";
   if (/query execution failed/i.test(text)) return "QUERY_FAILED";
+  // Status/results 404 for an expired queryId, or one submitted under another key.
+  if (/query not found|could not find query/i.test(text)) return "QUERY_NOT_FOUND";
   if (/\b429\b|too many requests|rate limit/i.test(text)) return "RATE_LIMITED";
   if (/timed? ?out|timeout|ETIMEDOUT|deadline/i.test(text)) return "UPSTREAM_TIMEOUT";
   return "UPSTREAM_ERROR";

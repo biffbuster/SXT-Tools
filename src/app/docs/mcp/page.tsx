@@ -280,6 +280,14 @@ cd sxt-tools && npm install   # builds the MCP server`}</code>
             <td>Retrying the same SQL fails the same way. Narrow it or rewrite it.</td>
           </tr>
           <tr>
+            <td><code>QUERY_NOT_FOUND</code></td>
+            <td>
+              <code>sxt.get_proof_result</code> was given a query id the prover no longer has, or
+              one submitted with a different SXT key.
+            </td>
+            <td>Run the query again with <code>sxt.run_proven_query</code>.</td>
+          </tr>
+          <tr>
             <td><code>RATE_LIMITED</code></td>
             <td>Too many calls in a minute.</td>
             <td>Wait for the time in the message.</td>
