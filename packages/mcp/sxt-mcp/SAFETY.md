@@ -1,4 +1,4 @@
- Engineering protocol
+# Engineering protocol
 
 This document defines how `sxt-mcp` is built and shipped. The defaults below
 are derived from the operational rules in the root `CLAUDE.md` and from the
@@ -25,7 +25,7 @@ the next one starts.
 | 10    | v0.4.0 | Cloudflare Workers hosting: read-only catalog split, WASM verifier extraction, edge client IP, Rate Limiting binding | Caller's own API quota |
 | 11    | v0.5.0 | `sxt.quote_query` / `sxt.execute_query` on-chain path (stdio only)  | Gated mainnet    |
 
-Current: **v0.4.0**. Six tools live, mainnet enabled behind the double-gate. The stdio binary exposes the full surface to Claude Desktop / Cursor / Claude Code. The HTTP binary exposes the read-only allowlist (`sxt.run_proven_query`, `sxt.get_proof_result`, `sxt.generate_proof_plan`) in two modes: local (one operator, env key) and public (many users, each with their own SXT key over OAuth).
+Current: **v0.4.0**. Eight tools live, mainnet enabled behind the double-gate. The stdio binary exposes the full surface to Claude Desktop / Cursor / Claude Code. The HTTP binary exposes the five-tool read-only allowlist (`sxt.list_tables`, `sxt.describe_table`, `sxt.run_proven_query`, `sxt.get_proof_result`, `sxt.generate_proof_plan`) in two modes: local (one operator, env key) and public (many users, each with their own SXT key over OAuth).
 
 ---
 
@@ -57,7 +57,7 @@ Any new tool that writes or spends must still call `selectNetwork()`.
 |-----------------------|--------------------|----------------------------------------------|
 | SXT chain RPC         | testnet WSS        | `wss://rpc.mainnet.sxt.network`              |
 | EVM chain             | Sepolia (`11155111`) | Base (`8453`) or Ethereum (`1`)            |
-| Off-chain prover      | testnet path       | `api.makeinfinite.dev` mainnet path          |
+| Off-chain prover      | mainnet catalog only (the prover has no testnet catalog) | `api.makeinfinite.dev` |
 
 The CLI scripts in `examples/scripts/` default to mainnet because they're operated by humans typing arguments directly. The MCP server defaults to testnet because it's invoked by agents. Different surface, conservative default. Reaching mainnet from the MCP server requires the explicit double-gate documented above.
 
@@ -72,7 +72,7 @@ Two env vars carry through from the host config:
 
 `sxt.generate_proof_plan` needs neither. It is a plain JSON-RPC read against a public chain endpoint, so an agent can compile a plan before the user has configured any credential.
 
-**Per-user isolation.** Credentials come from process env, so one server process acts as exactly one identity. Each user's data is scoped on chain by their own wallet: the namespace is suffixed with the publishing address, so two users of the same tooling can never write to each other's tables. The server holds no cross-invocation state and writes no shared handoff file — every artifact path is derived from the caller's own input path (`<their-csv>.inferred-schema.json`, `<their-project>/.deploy-state.json`), and results are returned inline so the agent's conversation carries the pipeline state rather than a file on disk.
+**Per-user isolation.** Credentials come from process env, so one server process acts as exactly one identity. Each user's data is scoped on chain by their own wallet: the namespace is suffixed with the publishing address, so two users of the same tooling can never write to each other's tables. The server holds no cross-invocation state and writes no shared handoff file. Every artifact path is derived from the caller's own input path (`<their-csv>.inferred-schema.json`, `<their-project>/.deploy-state.json`), and results are returned inline so the agent's conversation carries the pipeline state rather than a file on disk.
 
 Both are validated **lazily**. The server starts and lists tools regardless
 of whether credentials are set. Validation happens inside the handler when
@@ -92,8 +92,11 @@ What each tool spends, by design, when fully implemented:
 | Tool                  | SXT chain credits | EVM gas      | API quota |
 |-----------------------|-------------------|--------------|-----------|
 | `sxt.publish_dataset` | Yes (per row)     | None         | None      |
+| `sxt.list_tables`     | None              | None         | None (discovery API, no credit) |
+| `sxt.describe_table`  | None              | None         | None      |
 | `sxt.generate_proof_plan` | None          | None         | None      |
-| `sxt.run_proven_query`| None              | None         | One call  |
+| `sxt.run_proven_query`| None              | None         | One query credit |
+| `sxt.get_proof_result`| None              | None         | None      |
 | `sxt.audit_contract`  | None              | None         | None      |
 | `sxt.deploy_contract` | None              | ~$0.50 ETH   | None      |
 
@@ -154,7 +157,7 @@ Each rule below is enforced in code, not just documentation. The two smoke scrip
 |-------------------------------------------------------|---------------------------------------------------|
 | Agent flips `mainnet: true` without env gate          | `selectNetwork()` throws `MainnetGateError`       |
 | Agent publishes table with `PRIMARY KEY` clause       | DDL builder rejects PK; refused before submit     |
-| Agent sends `sourceNetwork: "mainnet"` lowercase      | Zod schema locks to literal `"MAINNET"`           |
+| Agent sends an invalid `sourceNetwork`                | Not a tool input; `prover.ts` always sends `mainnet` |
 | Agent uses raw API key as Bearer                      | Server handles JWT exchange internally            |
 | Agent redeploys to live address                       | `.deploy-state.json` idempotency check            |
 | Agent submits unproven SQL operator                   | SQL validation against proven surface             |
@@ -203,6 +206,15 @@ Run before tagging any release:
 - [ ] Operational rules from the root `CLAUDE.md` (no PRIMARY KEY, JWT exchange, `MAINNET` literal, mainnet double-gate) remain enforced in code.
 - [ ] Idempotency guards present for any tool mutating chain state.
 - [ ] Local end-to-end demo recorded (screen capture against Claude Desktop or the canonical pipeline script).
+- [ ] `npm pack --dry-run` lists only `dist/`, `docs/`, `README.md`, `SAFETY.md`, `LICENSE` and `package.json`.
+
+Before pointing a public URL at a Worker deploy, also:
+
+- [ ] `npm run check:worker` builds the bundle, and `SXT_MCP_PUBLIC_URL` matches the custom domain.
+- [ ] `SXT_MCP_TOKEN_SECRET` is set as a Worker secret, never in `wrangler.jsonc` or the repo.
+- [ ] No staging or preview hostnames appear in tracked files.
+- [ ] Through the deployed Worker, in each documented client: OAuth sign-in, `sxt.list_tables`, `sxt.describe_table`, and one verified `sxt.run_proven_query`.
+- [ ] The docs site `HOSTED_URL` and the npm release go live together.
 
 ---
 
@@ -214,16 +226,16 @@ between transports.
 
 | Binary           | Transport       | Tools exposed                                                                       | Audience                       | Auth                          |
 |------------------|-----------------|-------------------------------------------------------------------------------------|--------------------------------|-------------------------------|
-| `sxt-mcp`        | stdio           | All 6 (`publish_dataset`, `run_proven_query`, `get_proof_result`, `generate_proof_plan`, `audit_contract`, `deploy_contract`) | Claude Code / Desktop / Cursor | host process credentials |
-| `sxt-mcp-http` (local)  | Streamable HTTP | **Read-only allowlist** (`run_proven_query`, `get_proof_result`, `generate_proof_plan`) | One operator, tunnels | optional static bearer (loopback OK) |
-| `sxt-mcp-http` (public) | Streamable HTTP | **Read-only allowlist** (`run_proven_query`, `get_proof_result`, `generate_proof_plan`) | Hosted, many users    | OAuth 2.1 or `X-SXT-API-Key`, caller's own key |
+| `sxt-mcp`        | stdio           | All 8 (`list_tables`, `describe_table`, `run_proven_query`, `get_proof_result`, `generate_proof_plan`, `publish_dataset`, `audit_contract`, `deploy_contract`) | Claude Code / Desktop / Cursor | host process credentials |
+| `sxt-mcp-http` (local)  | Streamable HTTP | **Read-only allowlist** (`list_tables`, `describe_table`, `run_proven_query`, `get_proof_result`, `generate_proof_plan`) | One operator, tunnels | optional static bearer (loopback OK) |
+| `sxt-mcp-http` (public) | Streamable HTTP | **Read-only allowlist** (`list_tables`, `describe_table`, `run_proven_query`, `get_proof_result`, `generate_proof_plan`) | Hosted, many users    | OAuth 2.1 or `X-SXT-API-Key`, caller's own key |
 
 ### Why the HTTP surface is narrowed
 
 `sxt.publish_dataset` and `sxt.deploy_contract` require a chain-write private
 key. `sxt.audit_contract` operates on filesystem paths and depends on
 `forge` + `slither` being installed on the server. None of those fit a
-network-exposed connector. The HTTP allowlist holds only tools that need no private key: `sxt.run_proven_query` spends API quota, and `sxt.generate_proof_plan` spends nothing. No chain writes, no wallet exposure. On the HTTP surface handlers also may not touch the filesystem: `generate_proof_plan` refuses `outputPath` there.
+network-exposed connector. The HTTP allowlist holds only tools that need no private key: `sxt.run_proven_query` spends one query credit on the caller's key, and the other four spend nothing. No chain writes, no wallet exposure. On the HTTP surface handlers also may not touch the filesystem: `generate_proof_plan` refuses `outputPath` there.
 
 This is enforced in code: `src/http-app.ts` calls
 `buildServer({ allowedTools: HTTP_READ_ONLY_TOOLS, surface: "hosted" })`, and the
@@ -294,4 +306,4 @@ Public mode refuses to start without `SXT_MCP_TOKEN_SECRET`, refuses a non-https
 
 ## Reporting issues
 
-Issues, anomalies, or feedback: open at the repo (issue tracker URL once public). Include the package version from the `mcp_client_info.version` field of the MCP initialize handshake. The server logs this on stderr when it starts.
+Issues, anomalies, or feedback: open an issue at https://github.com/biffbuster/SXT-Tools/issues. Include the package version from the `mcp_client_info.version` field of the MCP initialize handshake. The server logs this on stderr when it starts.
