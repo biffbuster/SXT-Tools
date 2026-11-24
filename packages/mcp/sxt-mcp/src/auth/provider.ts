@@ -371,14 +371,18 @@ export class SxtOAuthProvider implements OAuthServerProvider {
 /**
  * CSP source for the client's redirect URI. Browsers apply form-action to the
  * redirect that follows the consent POST, so 'self' alone blocks the hop back
- * to the client.
+ * to the client. They apply it to every later hop too: Cursor's callback on
+ * www.cursor.com 308s to cursor.com, so an https redirect allows any https
+ * target. The page runs no scripts and its one form posts to 'self'.
  */
 function redirectSource(redirectUri: string | undefined): string {
   if (!redirectUri) return "";
   try {
     const u = new URL(redirectUri);
-    // Custom schemes (cursor://, vscode://) have an opaque origin; allow the scheme.
-    return u.protocol === "http:" || u.protocol === "https:" ? ` ${u.origin}` : ` ${u.protocol}`;
+    if (u.protocol === "https:") return " https:";
+    // Loopback http keeps its exact origin. Custom schemes (cursor://,
+    // vscode://) have an opaque origin; allow the scheme.
+    return u.protocol === "http:" ? ` ${u.origin}` : ` ${u.protocol}`;
   } catch {
     return "";
   }
