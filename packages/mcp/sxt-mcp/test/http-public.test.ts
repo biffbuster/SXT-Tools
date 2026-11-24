@@ -216,6 +216,28 @@ describe("OAuth with bring-your-own key", () => {
     expect(await res.text()).toContain("SXT did not accept that API key");
   });
 
+  it("lets an https redirect chain through form-action (Cursor's www.cursor.com 308s to cursor.com)", async () => {
+    const callback = "https://www.cursor.com/agents/mcp/oauth/callback";
+    const reg = await fetch(`${base}/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ redirect_uris: [callback], token_endpoint_auth_method: "none" }),
+    });
+    const { client_id } = (await reg.json()) as { client_id: string };
+    const u = new URL(`${base}/authorize`);
+    u.search = new URLSearchParams({
+      response_type: "code",
+      client_id,
+      redirect_uri: callback,
+      code_challenge: pkce().challenge,
+      code_challenge_method: "S256",
+      resource: `${base}/mcp`,
+    }).toString();
+    const res = await fetch(u, { redirect: "manual" });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-security-policy")).toContain("form-action 'self' https:;");
+  });
+
   it("redirects with access_denied when the user cancels", async () => {
     const clientId = await register();
     const c = await startAuthorize(clientId, pkce().challenge);
