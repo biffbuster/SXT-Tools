@@ -142,7 +142,7 @@ Each `SKILL.md` is loaded by the agent when its trigger phrases match the user's
 
 **What Claude does:**
 
-1. Identifies which zk-committed surface fits the goal: SXT's chain-wide indexed tables (`ETHEREUM.BLOCKS`, `ETHEREUM.TRANSACTIONS`) for arbitrary chain queries, OR your `index-contract`-populated per-event tables for typed event queries.
+1. Identifies which zk-committed surface fits the goal: SXT's chain-wide indexed tables that prove today (`ETHEREUM.BLOCKS`, `ETHEREUM.NATIVE_WALLETS`, `ETHEREUM.ERC173_OWNERSHIP_TRANSFERRED`), OR your `index-contract`-populated per-event tables for typed event queries.
 2. Generates a **parameterized** SQL → proof plan via `commitments_v1_evmProofPlan` so one deployed contract serves any input. The plan is just hex bytes baked into the contract; runtime args flow through `requestQuery`.
 3. Renders the matching `OnchainQuery.sol` from the parameterized template via `render-onchain-query.mjs --params`.
 4. Hands off to `deploy-contract` + `pre-deploy-audit` for the on-chain consumer side.

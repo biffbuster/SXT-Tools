@@ -4,7 +4,7 @@ Proof of SQL tooling for Space and Time. Publish data, register contracts for in
 
 ![version](https://img.shields.io/badge/version-0.2.0--beta.1-blue) ![node](https://img.shields.io/badge/node-%3E%3D20-brightgreen) ![license](https://img.shields.io/badge/license-MIT-lightgrey) ![platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows-informational)
 
-> Built in partnership with Space and Time. Every command, cost, and limitation in this document was verified live on mainnet, most recently 2026-06-11 ([evidence](./CHANGELOG.md)).
+> Built in partnership with Space and Time. Commands, costs, and limitations in this document were verified live on mainnet; dates and evidence are in the [CHANGELOG](./CHANGELOG.md), most recently 2026-11-24.
 
 ```
 $ sxt query
@@ -66,7 +66,7 @@ sxt verify        # same proof, more detail: positive and negative membership
 | `sxt demo` | Live proven query plus contract liveness rehearsal | free |
 | `sxt publish <csv> [PREFIX.TABLE]` | CSV to chain-secured SXT table (schema auto-inferred) | **20 SXT burned** per table (+20 for a first namespace) |
 | `sxt tables [search]` | List public tables, yours and other users' (`--describe PREFIX.TABLE` for columns) | free |
-| `sxt verify` | Off-chain Proof of SQL on the active table, or any table with `--table` / `--sql`. **The zero-cost gate** | free |
+| `sxt verify` | Off-chain Proof of SQL on the active table, or any table with `--table` / `--sql`. **The gate before any on-chain spend** | 1 query credit |
 | `sxt plan` | EVM proof plans for the active table | free |
 | `sxt chain-plan --table … --predicate … --param-types …` | Parameterized plan against any provable table (`$1`, `$2` bound at call time) | free |
 | `sxt render` | Generate the typed Solidity consumer from a plan | free |
@@ -103,7 +103,7 @@ A CSV on your laptop becomes a row a smart contract can trust.
 # 1. Publish. Pick any UPPERCASE_SNAKE prefix; the chain suffixes your wallet hex
 sxt publish ./my-members.csv MY_PROJECT.MEMBERS --lookup-column EMAIL
 
-# 2. THE GATE (free): a passing off-chain proof is mathematically guaranteed
+# 2. THE GATE (1 query credit, no SXT or ETH): a passing off-chain proof is mathematically guaranteed
 #    to fulfill on-chain (same prover backend). Never skip this before spending.
 sxt verify
 

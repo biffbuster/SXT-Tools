@@ -1,6 +1,6 @@
  @biffbuster/sxt-mcp
 
-MCP server for Space and Time. Exposes the publish-and-prove pipeline as typed MCP tools, callable from Claude Desktop, Cursor, ChatGPT Developer Mode, and any other client that speaks the Model Context Protocol.
+MCP server for Space and Time. Exposes the publish-and-prove pipeline as typed MCP tools, callable from Claude Desktop, Cursor, ChatGPT, Codex, and any other client that speaks the Model Context Protocol.
 
 The package ships two binaries.
 
@@ -89,7 +89,7 @@ node dist/http.js
 # listens on http://127.0.0.1:3333/mcp
 ```
 
-By default the HTTP server binds to loopback. To expose it to a remote client (ChatGPT Developer Mode connector, hosted agent), set a bearer token and a non-loopback bind:
+By default the HTTP server binds to loopback. To expose it to a remote client (a ChatGPT custom MCP server, a hosted agent), set a bearer token and a non-loopback bind:
 
 ```bash
 SXT_MCP_HTTP_BEARER="<a random secret>" \
@@ -99,7 +99,7 @@ SXT_MCP_BIND_HOST="0.0.0.0" \
 
 The HTTP entrypoint refuses to start a non-loopback bind without `SXT_MCP_HTTP_BEARER` set. Constant-time bearer comparison defeats length-leaking timing attacks. Host header allowlist and Origin header allowlist run before any MCP handler.
 
-For ChatGPT, tunnel the loopback server to a public HTTPS URL (`cloudflared`, `ngrok`) and paste the URL plus the bearer into the Developer Mode connector dialog.
+For ChatGPT, tunnel the loopback server to a public HTTPS URL (`cloudflared`, `ngrok`) and add it under Plugins, then Add custom MCP server, with the bearer.
 
 ## Hosted deployment
 
