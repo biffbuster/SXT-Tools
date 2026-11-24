@@ -31,6 +31,15 @@
 - Setup docs: ChatGPT custom servers live under Plugins (Developer mode is no
   longer required); Cursor needs a signed-in Cursor account before
   Authenticate works.
+- Stale content: the `chain-data-query` skill body now matches the
+  2026-11-19 surface (three proving tables, BLOCKS examples, real
+  `query-onchain.mjs --args` flag); `proof-of-sql-foundations`, the plugin
+  README and HOW_IT_WORKS no longer list `ETHEREUM.TRANSACTIONS` as proving.
+  Off-chain pre-flights are described as one query credit, not free.
+
+### Removed
+- `WalletActivityProver.sol`: built on `ETHEREUM.TRANSACTIONS` with an
+  ungrouped `COUNT(*)`, so it could never fulfill.
 
 ### Known
 - Cursor's desktop callback listens on port 8787, the default port of

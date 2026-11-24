@@ -169,7 +169,7 @@ Report verified=true/false for each.`}</code></pre>
         Or run the steps yourself — each is one <code>sxt</code> command:
       </p>
       <pre><code>{`$ sxt publish ./my-members.csv MY_PROJECT.MEMBERS   # 20 SXT burned per object
-$ sxt verify                                        # THE GATE (free) — never skip before spending
+$ sxt verify                                        # THE GATE (1 query credit) — never skip before spending
 $ sxt plan                                          # EVM proof plans for the active table
 $ sxt render                                        # typed Solidity consumer from the plan
 $ (cd ../contracts/sxt-onchain-query && forge build)

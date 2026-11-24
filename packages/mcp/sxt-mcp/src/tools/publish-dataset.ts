@@ -31,8 +31,8 @@ export const publishDatasetSchema = z
     file: z
       .string()
       .describe(
-        "Absolute or relative path to a CSV file. Parquet and JSON are not yet supported in v0.1.0; " +
-          "for those formats use the CLI script directly until v0.2.0.",
+        "Absolute or relative path to a CSV file. Parquet and JSON are not supported here; " +
+          "convert them to CSV first.",
       ),
     tableRef: z
       .string()
@@ -502,7 +502,7 @@ export async function publishDatasetHandler(args: PublishDatasetArgs) {
         default:
           throw new Error(
             `Unsupported SQL type "${sqlType}" on column ${col}. DECIMAL75 needs a custom encoder; ` +
-              "use the chain.spaceandtime.io UI for that until v0.2.0.",
+              "publish that column through the chain.spaceandtime.io UI.",
           );
       }
       // Coerce strings to the JS types Arrow's typed builders expect. Skipping

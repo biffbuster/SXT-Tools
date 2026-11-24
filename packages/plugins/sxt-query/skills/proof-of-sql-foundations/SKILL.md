@@ -68,7 +68,7 @@ Space and Time exposes two kinds of tables to the agent:
 
 Use UPPERCASE schema notation when writing queries: `<SCHEMA>.<TABLE>`.
 
-Pre-built core-chain tables DO exist on the zk-proven surface — but the empirically validated set is narrow: `ETHEREUM.BLOCKS` and `ETHEREUM.TRANSACTIONS` round-trip the prover end-to-end today (others in the catalog fail with `254018 incomplete commitment coverage`). Route chain-data questions to the `chain-data-query` skill, which owns that validated list. For anything else, the user registers a contract for indexing (`index-contract`) or publishes their own dataset (`dataset-publish`).
+Pre-built core-chain tables DO exist on the zk-proven surface — but the empirically validated set is narrow: `ETHEREUM.BLOCKS`, `ETHEREUM.NATIVE_WALLETS` and `ETHEREUM.ERC173_OWNERSHIP_TRANSFERRED` prove end-to-end today (one live proof per table, 2026-11-19). Eleven others, including `ETHEREUM.TRANSACTIONS`, plan but fail at the prover and are refused. Route chain-data questions to the `chain-data-query` skill, which owns that validated list. For anything else, the user registers a contract for indexing (`index-contract`) or publishes their own dataset (`dataset-publish`).
 
 Hit the SXT Discovery API to enumerate what's queryable for the user's account before writing any query you're not certain about.
 
