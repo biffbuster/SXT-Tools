@@ -1,7 +1,7 @@
 /**
  * Consent page for the hosted OAuth flow. Plain server-rendered HTML with no
  * scripts, no external assets, and every interpolated value escaped. The form
- * posts back to the same origin (CSP `form-action 'self'`); the pending
+ * posts back to the same origin; the pending
  * authorization request travels as a sealed token, so it cannot be forged or
  * edited in the browser.
  */
