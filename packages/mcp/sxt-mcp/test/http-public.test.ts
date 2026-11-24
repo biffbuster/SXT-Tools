@@ -216,7 +216,7 @@ describe("OAuth with bring-your-own key", () => {
     expect(await res.text()).toContain("SXT did not accept that API key");
   });
 
-  it("lets an https redirect chain through form-action (Cursor's www.cursor.com 308s to cursor.com)", async () => {
+  it("lets an https redirect chain through form-action (Cursor: www.cursor.com, cursor.com, then loopback)", async () => {
     const callback = "https://www.cursor.com/agents/mcp/oauth/callback";
     const reg = await fetch(`${base}/register`, {
       method: "POST",
@@ -235,7 +235,9 @@ describe("OAuth with bring-your-own key", () => {
     }).toString();
     const res = await fetch(u, { redirect: "manual" });
     expect(res.status).toBe(200);
-    expect(res.headers.get("content-security-policy")).toContain("form-action 'self' https:;");
+    expect(res.headers.get("content-security-policy")).toContain(
+      "form-action 'self' https: http://localhost:* http://127.0.0.1:*;",
+    );
   });
 
   it("redirects with access_denied when the user cancels", async () => {
