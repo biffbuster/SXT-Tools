@@ -65,7 +65,7 @@ export default function McpPage() {
 
       <h3>Cursor</h3>
       <p>
-        In <code>~/.cursor/mcp.json</code>, or through Cursor Settings, then MCP:
+        In <code>~/.cursor/mcp.json</code>, or through Cursor Settings, then Tools &amp; MCP:
       </p>
       <pre>
         <code>{`{
@@ -74,11 +74,18 @@ export default function McpPage() {
   }
 }`}</code>
       </pre>
+      <p>
+        Sign in to your Cursor account first; Cursor does not start the MCP sign-in while
+        you are logged out. Then click <strong>Authenticate</strong> next to{" "}
+        <code>sxt</code>. Running tools from the Agent needs a model your Cursor plan
+        unlocks; on the free plan some accounts have none.
+      </p>
 
       <h3>ChatGPT</h3>
       <p>
-        Turn on Developer mode, then add a connector with the URL above. ChatGPT runs the
-        same sign-in flow.
+        Open Plugins, click <strong>+</strong>, then <strong>Add custom MCP server</strong>.
+        Paste the URL, choose OAuth, and click Create. ChatGPT runs the same sign-in flow.
+        Codex shares the plugin and its sign-in with ChatGPT on the same OpenAI account.
       </p>
 
       <h3>Agents and scripts</h3>

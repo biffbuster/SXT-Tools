@@ -1,5 +1,42 @@
 # Changelog
 
+## Unreleased (2026-11-24)
+
+### Verified
+- Hosted MCP clients against the staging Worker, each with OAuth sign-in on
+  its own SXT key:
+
+  | Client | Sign-in | Tools listed | Verified proof |
+  |---|---|---|---|
+  | Claude (claude.ai, Claude Code) | yes | yes | yes, 2026-11-19 (IRIS GROUP BY) |
+  | Codex | yes | yes | IRIS `0a6a9065-d886-4f8c-b31c-7ef3dccbde92`, BLOCKS `ee6cb902-aab2-4cf1-9601-cddc4ea0a5e7` |
+  | ChatGPT | yes | yes | yes, 2026-11-23 |
+  | Cursor | yes, after #13 | yes, all five | not run: the Agent needs a model the free plan did not unlock |
+
+  The dotted tool names (`sxt.list_tables`) did not block any of them.
+
+### Fixed
+- Cursor sign-in left the browser blank or stuck on the consent page. The
+  consent page's CSP `form-action` applied to every redirect after Connect,
+  and Cursor's callback chains through `www.cursor.com`, `cursor.com` and
+  `http://localhost:8787/callback`. The directive is removed; the page keeps
+  `default-src 'none'`, escaped values and the Origin check (#12, #13).
+- Resuming an expired queryId, or one from another SXT key, returned a
+  retryable `UPSTREAM_ERROR`. It now returns non-retryable `QUERY_NOT_FOUND`
+  (#11).
+
+### Changed
+- Successful tool calls log the proof `status` and `queryId`, so a pending
+  proof is distinguishable from a verified one (#10).
+- Setup docs: ChatGPT custom servers live under Plugins (Developer mode is no
+  longer required); Cursor needs a signed-in Cursor account before
+  Authenticate works.
+
+### Known
+- Cursor's desktop callback listens on port 8787, the default port of
+  `wrangler dev` (`npm run dev:worker`). While a local Worker runs, Cursor's
+  MCP sign-in fails for every server.
+
 ## Unreleased (2026-11-19)
 
 ### Fixed
