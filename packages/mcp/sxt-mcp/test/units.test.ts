@@ -79,6 +79,19 @@ describe("sanitizeError", () => {
     expect(e.code).toBe("TABLE_NOT_PROVABLE");
   });
 
+  it("classifies an expired or foreign queryId as non-retryable", () => {
+    // Exact prover text from a resume of an expired query on 2026-11-23.
+    const e = sanitizeError(
+      new UpstreamError(
+        "Prover",
+        `status poll failed: GET /v1/zkquery/{id}/status: 404: {"type":"CLIENT: Resource does not exist","title":"Query not found","detail":"Could not find query 'ee6cb902-aab2-4cf1-9601-cddc4ea0a5e7'"}`,
+      ),
+    );
+    expect(e.code).toBe("QUERY_NOT_FOUND");
+    expect(e.retryable).toBe(false);
+    expect(e.message).not.toContain("404");
+  });
+
   it("does not let the troubleshooting hint drive classification", () => {
     const e = sanitizeError(new UpstreamError("Prover", "connection reset", "raw API key passed as Bearer (401)"));
     expect(e.code).toBe("UPSTREAM_ERROR");
