@@ -369,26 +369,14 @@ export class SxtOAuthProvider implements OAuthServerProvider {
 }
 
 /**
- * CSP source for the client's redirect URI. Browsers apply form-action to the
- * redirect that follows the consent POST, so 'self' alone blocks the hop back
- * to the client. They apply it to every later hop too: Cursor's callback on
- * www.cursor.com 308s to cursor.com, so an https redirect allows any https
- * target. The page runs no scripts and its one form posts to 'self'.
+ * No form-action directive. Browsers apply it to every redirect after the
+ * consent POST, and clients chain redirects we do not control: Cursor's
+ * www.cursor.com callback 308s to cursor.com, which 302s to the IDE's
+ * http://localhost:8787 listener, and older builds use cursor://. Each change
+ * broke sign-in (2026-11-24). The page runs no scripts (default-src 'none'),
+ * escapes every value, and its one form posts to its own origin.
  */
-function redirectSource(redirectUri: string | undefined): string {
-  if (!redirectUri) return "";
-  try {
-    const u = new URL(redirectUri);
-    if (u.protocol === "https:") return " https:";
-    // Loopback http keeps its exact origin. Custom schemes (cursor://,
-    // vscode://) have an opaque origin; allow the scheme.
-    return u.protocol === "http:" ? ` ${u.origin}` : ` ${u.protocol}`;
-  } catch {
-    return "";
-  }
-}
-
-function securityHeaders(res: Response, redirectUri?: string): void {
+function securityHeaders(res: Response): void {
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("X-Frame-Options", "DENY");
   // Not no-referrer: under that policy browsers send `Origin: null` on the
@@ -398,13 +386,12 @@ function securityHeaders(res: Response, redirectUri?: string): void {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader(
     "Content-Security-Policy",
-    `default-src 'none'; style-src 'unsafe-inline'; form-action 'self'${redirectSource(redirectUri)}; ` +
-      "frame-ancestors 'none'; base-uri 'none'",
+    "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'",
   );
 }
 
 function sendConsent(res: Response, status: number, view: Parameters<typeof renderConsentPage>[0]): void {
-  securityHeaders(res, view.redirectUri);
+  securityHeaders(res);
   res.status(status).type("html").send(renderConsentPage(view));
 }
 

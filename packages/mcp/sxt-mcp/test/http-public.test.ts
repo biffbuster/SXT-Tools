@@ -99,8 +99,10 @@ async function startAuthorize(clientId: string, challenge: string): Promise<stri
   expect(res.headers.get("x-frame-options")).toBe("DENY");
   // no-referrer would make browsers send `Origin: null` on the consent POST.
   expect(res.headers.get("referrer-policy")).toBe("same-origin");
-  // form-action must allow the redirect back to the client.
-  expect(res.headers.get("content-security-policy")).toContain("form-action 'self' http://127.0.0.1:9999;");
+  // No form-action: it would block client redirect chains (see securityHeaders).
+  const csp = res.headers.get("content-security-policy")!;
+  expect(csp).toContain("default-src 'none'");
+  expect(csp).not.toContain("form-action");
   const html = await res.text();
   expect(html).not.toContain("<script>");
   const m = html.match(/name="consent" value="([^"]+)"/);
@@ -216,7 +218,7 @@ describe("OAuth with bring-your-own key", () => {
     expect(await res.text()).toContain("SXT did not accept that API key");
   });
 
-  it("lets an https redirect chain through form-action (Cursor's www.cursor.com 308s to cursor.com)", async () => {
+  it("serves Cursor's https callback a consent page with no form-action (its chain ends on localhost:8787)", async () => {
     const callback = "https://www.cursor.com/agents/mcp/oauth/callback";
     const reg = await fetch(`${base}/register`, {
       method: "POST",
@@ -235,7 +237,9 @@ describe("OAuth with bring-your-own key", () => {
     }).toString();
     const res = await fetch(u, { redirect: "manual" });
     expect(res.status).toBe(200);
-    expect(res.headers.get("content-security-policy")).toContain("form-action 'self' https:;");
+    const csp = res.headers.get("content-security-policy")!;
+    expect(csp).not.toContain("form-action");
+    expect(csp).toContain("frame-ancestors 'none'");
   });
 
   it("redirects with access_denied when the user cancels", async () => {
